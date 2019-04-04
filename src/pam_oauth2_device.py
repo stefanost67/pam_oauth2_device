@@ -44,6 +44,9 @@ def load_config(file_name):
 def make_authorization_request(config):
     device_response = requests.post(
         config['oauth']['device_endpoint'],
+        auth=(
+            config['oauth']['client']['id'],
+            config['oauth']['client']['secret']),
         data={
             'client_id': config['oauth']['client']['id'],
             'scope': ' '.join(config['oauth']['scope'])
