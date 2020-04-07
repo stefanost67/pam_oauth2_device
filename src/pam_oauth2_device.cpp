@@ -307,8 +307,10 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
     }
 
     // Try to authenticate against local config
+    syslog(LOG_INFO, "Trying to map user %s to %s", userinfo.username.c_str(), pUsername);
     if (config.usermap.count(userinfo.username) > 0) {
         if (config.usermap[userinfo.username].count(pUsername) > 0) {
+            syslog(LOG_INFO, "User %s mapped to %s", userinfo.username.c_str(), pUsername);
             ret = PAM_SUCCESS;
             goto end;
         }
