@@ -1,6 +1,7 @@
 #include <curl/curl.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
+#include <syslog.h>
 
 #include <chrono>
 #include <exception>
@@ -14,7 +15,6 @@
 #include "pam_oauth2_device.hpp"
 
 using json = nlohmann::json;
-
 
 std::string getQr(const char* text, const int ecc=0, const int border=1) {
     qrcodegen::QrCode::Ecc error_correction_level;
@@ -127,8 +127,8 @@ int poll_for_token(const char *client_id,
                    const char *device_code,
                    std::string &token) {
     int rc = 0,
-        timeout = 300,
-        interval = 3;
+    timeout = 300,
+    interval = 3;
     CURL *curl;
     CURLcode res;
     json data;
@@ -235,17 +235,19 @@ PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags, int argc, const c
 
 /* expected hook, custom logic */
 PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, const char **argv ) {
-    int rc, pam_err;
+    int rc, pam_err, ret, debug;
     const char* pUsername;
     char *response;
     struct pam_conv *conv;
-	struct pam_message msg;
-	const struct pam_message *msgp;
-	struct pam_response *resp;
+    struct pam_message msg;
+    const struct pam_message *msgp;
+    struct pam_response *resp;
     std::string prompt, token;
     Config config;
     DeviceAuthResponse device_auth_response;
     Userinfo userinfo;
+
+    openlog("pam_oauth2_device", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
 
     rc = pam_get_user(pamh, &pUsername, "Username: ");
 
@@ -255,21 +257,26 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
         if (config.load("/etc/pam_oauth2_device/config.json")) return PAM_AUTH_ERR;
     }
 
-    if (make_authorization_request(
+    rc = make_authorization_request(
             config.client_id.c_str(), config.client_secret.c_str(),
             config.scope.c_str(), config.device_endpoint.c_str(),
-            &device_auth_response)) {
-        return PAM_AUTH_ERR;
+            &device_auth_response);
+    if (rc) {
+        syslog(LOG_ERR, "make_authorization_request failed, rc=%d", rc);
+        ret = PAM_AUTH_ERR;
+	goto end;
     }
 
     pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
-	if (pam_err != PAM_SUCCESS) {
-		return PAM_SYSTEM_ERR;
+    if (pam_err != PAM_SUCCESS) {
+                syslog(LOG_ERR, "pam_get_item failed, rc=%d", pam_err);
+		ret = PAM_SYSTEM_ERR;
+		goto end;
     }
     prompt = device_auth_response.get_prompt(config.qr_error_correction_level);
-	msg.msg_style = PAM_PROMPT_ECHO_OFF;
-	msg.msg = prompt.c_str();
-	msgp = &msg;
+    msg.msg_style = PAM_PROMPT_ECHO_OFF;
+    msg.msg = prompt.c_str();
+    msgp = &msg;
     response = NULL;
     pam_err = (*conv->conv)(1, &msgp, &resp, conv->appdata_ptr);
     if (resp != NULL) {
@@ -282,21 +289,28 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
     }
     if (response) free(response);
 
-    if (poll_for_token(config.client_id.c_str(), config.client_secret.c_str(),
+    rc = poll_for_token(config.client_id.c_str(), config.client_secret.c_str(),
                        config.token_endpoint.c_str(),
-                       device_auth_response.device_code.c_str(), token)) {
-        return PAM_AUTH_ERR;
+                       device_auth_response.device_code.c_str(), token);
+    if (rc) {
+        syslog(LOG_ERR, "poll_for_token failed, rc=%d", rc);
+        ret = PAM_AUTH_ERR;
+	goto end;
     }
 
-    if (get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
-                     config.username_attribute.c_str(), &userinfo)) {
-        return PAM_AUTH_ERR;
+    rc = get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
+                     config.username_attribute.c_str(), &userinfo);
+    if (rc) {
+        syslog(LOG_ERR, "get_userinfo failed, rc=%d", rc);
+        ret = PAM_AUTH_ERR;
+	goto end;
     }
 
     // Try to authenticate against local config
     if (config.usermap.count(userinfo.username) > 0) {
         if (config.usermap[userinfo.username].count(pUsername) > 0) {
-            return PAM_SUCCESS;
+            ret = PAM_SUCCESS;
+            goto end;
         }
     }
 
@@ -309,9 +323,16 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
                              config.ldap_user.c_str(), config.ldap_passwd.c_str(),
                              filter, config.ldap_attr.c_str(), pUsername);
         delete[] filter;
-        if (rc == LDAPQUERY_TRUE) return PAM_SUCCESS;
+        if (rc == LDAPQUERY_TRUE) {
+            ret = PAM_SUCCESS;
+            goto end;
+        }
     }
 
-    return PAM_AUTH_ERR;
-}
+    ret = PAM_AUTH_ERR;
+    syslog(LOG_ERR, "general error");
 
+    end:
+	closelog();
+	return ret;
+}
