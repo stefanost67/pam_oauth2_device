@@ -235,7 +235,7 @@ PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags, int argc, const c
 
 /* expected hook, custom logic */
 PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, const char **argv ) {
-    int rc, pam_err, ret, debug;
+    int rc, pam_err, ret;
     const char* pUsername;
     char *response;
     struct pam_conv *conv;
@@ -247,7 +247,7 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
     DeviceAuthResponse device_auth_response;
     Userinfo userinfo;
 
-    openlog("pam_oauth2_device", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
+    openlog("pam_oauth2_device", LOG_PID | LOG_NDELAY, LOG_AUTH);
 
     rc = pam_get_user(pamh, &pUsername, "Username: ");
 
@@ -326,13 +326,14 @@ PAM_EXTERN int pam_sm_authenticate( pam_handle_t *pamh, int flags, int argc, con
                              filter, config.ldap_attr.c_str(), pUsername);
         delete[] filter;
         if (rc == LDAPQUERY_TRUE) {
+            syslog(LOG_INFO, "User %s mapped to %s via LDAP", userinfo.username.c_str(), pUsername);
             ret = PAM_SUCCESS;
             goto end;
         }
     }
 
     ret = PAM_AUTH_ERR;
-    syslog(LOG_ERR, "general error");
+    syslog(LOG_ERR, "General error");
 
     end:
 	closelog();
