@@ -24,5 +24,5 @@ docker run --rm -v ${PWD}:/data pamoauth2device-deb-build bash -c 'cp *.deb /dat
 
 ```bash
 docker build -t pamoauth2device-rpm-build .
-docker run --rm -v ${PWD}:/data pamoauth2device-rpm-build cp -r 'rpmbuild/RPMS /data'
+docker run --rm -v ${PWD}:/data pamoauth2device-rpm-build cp -r rpmbuild/RPMS /data
 ```
