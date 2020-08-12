@@ -12,11 +12,11 @@
 #include <regex>
 
 #include "include/config.hpp"
+#include "include/metadata.hpp"
 #include "include/ldapquery.h"
 #include "include/nayuki/QrCode.hpp"
 #include "include/nlohmann/json.hpp"
 #include "pam_oauth2_device.hpp"
-#include "include/metadata.hpp"
 
 using json = nlohmann::json;
 
@@ -348,14 +348,15 @@ bool is_authorized(Config *config,
     // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
     if (config->cloud_access)
     {
+
         try
         {
-            metadata.load("/mt/context/openstack/latest/meta_data.json");
+            metadata.load("/mnt/context/openstack/latest/meta_data.json");
         }
         catch (json::exception &e)
         {
             // An exception means it's probably safer to not allow access
-            return false;
+            throw PamError();
         }
 
         CURL *curl;
@@ -377,12 +378,12 @@ bool is_authorized(Config *config,
         {
             printf(readBuffer.c_str());
             auto data = json::parse(readBuffer);
-            std::vector<std::string> groups = data.at(0).get<std::vector<std::string>>();
+            std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             for (auto &group : groups)
             {
                 for (auto &user_group : userinfo->groups)
                 {
-                    if (group.compare(user_group) == 0 && username_remote == config->cloud_username.c_str())
+                    if (group.compare(user_group) == 0 && strcmp(username_local, config->cloud_username.c_str()) == 0)
                     {
                         // One of the users IRIS IAM groups matches one of the project groups, and they are trying to login with a valid username
                         return true;

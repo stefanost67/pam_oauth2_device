@@ -10,4 +10,4 @@ public:
     std::string project_id;
 };
 
-#endif // PAM_OAUTH2_DEVICE_CONFIG_HPP
+#endif // PAM_OAUTH2_DEVICE_METADATA_HPP

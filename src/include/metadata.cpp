@@ -1,5 +1,4 @@
 #include <fstream>
-#include <set>
 
 #include "metadata.hpp"
 #include "nlohmann/json.hpp"
