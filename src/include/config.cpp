@@ -20,6 +20,13 @@ void Config::load(const char *path)
     userinfo_endpoint = j.at("oauth").at("userinfo_endpoint").get<std::string>();
     username_attribute = j.at("oauth").at("username_attribute").get<std::string>();
     qr_error_correction_level = j.at("qr").at("error_correction_level").get<int>();
+
+    if (j.find("group") != j.end())
+    {
+        group_access = j.at("group").at("access").get<bool>();
+        group_service_name = j.at("group").at("service_name").get<std::string>();
+    }
+
     if (j.find("ldap") != j.end())
     {
         ldap_host = j.at("ldap").at("host").get<std::string>();

@@ -5,6 +5,11 @@
 #include <chrono>
 #include <sstream>
 #include <thread>
+#include <vector>
+#include <iterator>
+#include <iostream>
+#include <string>
+#include <regex>
 
 #include "include/config.hpp"
 #include "include/ldapquery.h"
@@ -19,6 +24,7 @@ class BaseError : public std::exception
 public:
     const char *what() const throw()
     {
+        printf("Base error");
         return "Base Error";
     }
 };
@@ -28,6 +34,7 @@ class PamError : public BaseError
 public:
     const char *what() const throw()
     {
+        printf("PAM error");
         return "PAM Error";
     }
 };
@@ -37,6 +44,7 @@ class NetworkError : public BaseError
 public:
     const char *what() const throw()
     {
+        printf("Network error");
         return "Network Error";
     }
 };
@@ -46,6 +54,7 @@ class TimeoutError : public NetworkError
 public:
     const char *what() const throw()
     {
+        printf("Timeout error");
         return "Timeout Error";
     }
 };
@@ -55,6 +64,7 @@ class ResponseError : public NetworkError
 public:
     const char *what() const throw()
     {
+        printf("Response error");
         return "Response Error";
     }
 };
@@ -162,6 +172,7 @@ void make_authorization_request(const char *client_id,
         throw NetworkError();
     try
     {
+        printf(readBuffer.c_str());
         auto data = json::parse(readBuffer);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -221,6 +232,7 @@ void poll_for_token(const char *client_id,
             throw NetworkError();
         try
         {
+            printf(readBuffer.c_str());
             data = json::parse(readBuffer);
             if (data["error"].empty())
             {
@@ -275,10 +287,12 @@ void get_userinfo(const char *userinfo_endpoint,
         throw NetworkError();
     try
     {
+        printf(readBuffer.c_str());
         auto data = json::parse(readBuffer);
         userinfo->sub = data.at("sub");
         userinfo->username = data.at(username_attribute);
         userinfo->name = data.at("name");
+        userinfo->groups = data.at("groups").get<std::vector<std::string>>();
     }
     catch (json::exception &e)
     {
@@ -325,8 +339,30 @@ void show_prompt(pam_handle_t *pamh,
 
 bool is_authorized(Config *config,
                    const char *username_local,
-                   const char *username_remote)
+                   Userinfo *userinfo)
 {
+    const char *username_remote = userinfo->username.c_str();
+
+    // Try to authorize againt group name in userinfo
+    if (config->group_access) {
+        for (auto &group : userinfo->groups) {
+            // is service name in group name? THEN do the split, otherwise ignore
+            if (group.find(config->group_service_name) != std::string::npos) {
+                std::regex reg("/");
+
+                std::sregex_token_iterator iter(group.begin(), group.end(), reg, -1);
+                std::sregex_token_iterator end;
+
+                std::vector<std::string> vec(iter, end);
+
+                // Check if our service name matches the group service name AND the local username matches the group service username
+                if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+
     // Try to authorize against local config
     if (config->usermap.count(username_remote) > 0)
     {
@@ -411,7 +447,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         return PAM_AUTH_ERR;
     }
 
-    if (is_authorized(&config, username_local, userinfo.username.c_str()))
+    if (is_authorized(&config, username_local, &userinfo))
         return PAM_SUCCESS;
     return PAM_AUTH_ERR;
 }

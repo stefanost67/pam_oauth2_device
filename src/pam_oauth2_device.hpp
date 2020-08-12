@@ -9,6 +9,7 @@ public:
     std::string sub,
         username,
         name;
+    std::vector<std::string> groups;
 };
 
 class DeviceAuthResponse

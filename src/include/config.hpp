@@ -21,8 +21,10 @@ public:
         ldap_user,
         ldap_passwd,
         ldap_filter,
-        ldap_attr;
+        ldap_attr,
+        group_service_name;
     int qr_error_correction_level;
+    bool group_access;
     std::map<std::string, std::set<std::string>> usermap;
 };
 
