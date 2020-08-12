@@ -21,6 +21,12 @@ void Config::load(const char *path)
     username_attribute = j.at("oauth").at("username_attribute").get<std::string>();
     qr_error_correction_level = j.at("qr").at("error_correction_level").get<int>();
 
+    if (j.find("cloud") != j.end()) {
+        cloud_access = j.at("cloud").at("access").get<bool>();
+        cloud_endpoint = j.at("cloud").at("endpoint").get<std::string>();
+        cloud_username = j.at("cloud").at("username").get<std::string>();
+    }
+
     if (j.find("group") != j.end())
     {
         group_access = j.at("group").at("access").get<bool>();

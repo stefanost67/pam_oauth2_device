@@ -16,6 +16,7 @@
 #include "include/nayuki/QrCode.hpp"
 #include "include/nlohmann/json.hpp"
 #include "pam_oauth2_device.hpp"
+#include "include/metadata.hpp"
 
 using json = nlohmann::json;
 
@@ -342,12 +343,67 @@ bool is_authorized(Config *config,
                    Userinfo *userinfo)
 {
     const char *username_remote = userinfo->username.c_str();
+    Metadata metadata;
+
+    // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
+    if (config->cloud_access)
+    {
+        try
+        {
+            metadata.load("/mt/context/openstack/latest/meta_data.json");
+        }
+        catch (json::exception &e)
+        {
+            // An exception means it's probably safer to not allow access
+            return false;
+        }
+
+        CURL *curl;
+        CURLcode res;
+        std::string readBuffer;
+
+        curl = curl_easy_init();
+        if (!curl)
+            throw NetworkError();
+        curl_easy_setopt(curl, CURLOPT_URL, config->cloud_endpoint.append("/").append(metadata.project_id).c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+        if (res != CURLE_OK)
+            throw NetworkError();
+        try
+        {
+            printf(readBuffer.c_str());
+            auto data = json::parse(readBuffer);
+            std::vector<std::string> groups = data.at(0).get<std::vector<std::string>>();
+            for (auto &group : groups)
+            {
+                for (auto &user_group : userinfo->groups)
+                {
+                    if (group.compare(user_group) == 0 && username_remote == config->cloud_username.c_str())
+                    {
+                        // One of the users IRIS IAM groups matches one of the project groups, and they are trying to login with a valid username
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (json::exception &e)
+        {
+            throw ResponseError();
+        }
+    }
 
     // Try to authorize againt group name in userinfo
-    if (config->group_access) {
-        for (auto &group : userinfo->groups) {
+    if (config->group_access)
+    {
+        for (auto &group : userinfo->groups)
+        {
             // is service name in group name? THEN do the split, otherwise ignore
-            if (group.find(config->group_service_name) != std::string::npos) {
+            if (group.find(config->group_service_name) != std::string::npos)
+            {
                 std::regex reg("/");
 
                 std::sregex_token_iterator iter(group.begin(), group.end(), reg, -1);
@@ -356,7 +412,8 @@ bool is_authorized(Config *config,
                 std::vector<std::string> vec(iter, end);
 
                 // Check if our service name matches the group service name AND the local username matches the group service username
-                if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0) {
+                if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0)
+                {
                     return true;
                 }
             }

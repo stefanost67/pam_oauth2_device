@@ -22,9 +22,12 @@ public:
         ldap_passwd,
         ldap_filter,
         ldap_attr,
-        group_service_name;
+        group_service_name,
+        cloud_endpoint,
+        cloud_username;
     int qr_error_correction_level;
-    bool group_access;
+    bool group_access,
+         cloud_access;
     std::map<std::string, std::set<std::string>> usermap;
 };
 
