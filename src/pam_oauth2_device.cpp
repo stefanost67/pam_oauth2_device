@@ -383,7 +383,7 @@ bool is_authorized(Config *config,
             {
                 for (auto &user_group : userinfo->groups)
                 {
-                    if (group.compare(user_group) == 0 && strcmp(username_local, config->cloud_username.c_str()) == 0)
+                    if (group.compare(user_group) == 0 && config->cloud_username.compare(std::string(username_local) + config->local_username_suffix) == 0)
                     {
                         // One of the users IRIS IAM groups matches one of the project groups, and they are trying to login with a valid username
                         return true;
@@ -418,7 +418,7 @@ bool is_authorized(Config *config,
                 {
                     return true;
                 }*/
-                if (strcmp(username_local, username_remote) == 0) {
+                if (std::string(username_local).compare(std::string(username_remote) + config->local_username_suffix) == 0) {
                     return true;
                 }
             }

@@ -24,7 +24,8 @@ public:
         ldap_attr,
         group_service_name,
         cloud_endpoint,
-        cloud_username;
+        cloud_username,
+        local_username_suffix;
     int qr_error_correction_level;
     bool group_access,
          cloud_access,
