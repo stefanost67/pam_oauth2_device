@@ -27,7 +27,8 @@ public:
         cloud_username;
     int qr_error_correction_level;
     bool group_access,
-         cloud_access;
+         cloud_access,
+         group_and_username_access;
     std::map<std::string, std::set<std::string>> usermap;
 };
 

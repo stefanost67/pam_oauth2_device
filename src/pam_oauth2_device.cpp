@@ -204,8 +204,8 @@ void poll_for_token(const char *client_id,
     std::string params;
 
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
-        << "&device_code=" << device_code
-        << "&client_id=" << client_id;
+        << "&device_code=" << device_code;
+        //<< "&client_id=" << client_id;
     params = oss.str();
 
     while (true)
@@ -403,9 +403,10 @@ bool is_authorized(Config *config,
         for (auto &group : userinfo->groups)
         {
             // is service name in group name? THEN do the split, otherwise ignore
-            if (group.find(config->group_service_name) != std::string::npos)
+            //if (group.find(config->group_service_name) != std::string::npos)
+            if (group.compare(config->group_service_name) == 0)
             {
-                std::regex reg("/");
+                /*std::regex reg("/");
 
                 std::sregex_token_iterator iter(group.begin(), group.end(), reg, -1);
                 std::sregex_token_iterator end;
@@ -415,6 +416,9 @@ bool is_authorized(Config *config,
                 // Check if our service name matches the group service name AND the local username matches the group service username
                 if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0)
                 {
+                    return true;
+                }*/
+                if (strcmp(username_local, username_remote) == 0) {
                     return true;
                 }
             }

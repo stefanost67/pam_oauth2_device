@@ -21,6 +21,15 @@
     "qr": {
         "error_correction_level": 0
     },
+    "group": {
+        "access": true,
+        "service_name": "stfc-cloud-prod"
+    },
+    "cloud": {
+        "endpoint": "http://host-172-16-114-198.nubes.stfc.ac.uk",
+        "username": "root",
+        "access": false
+    },
     "users": {
         "provider_user_id_1":
         [
