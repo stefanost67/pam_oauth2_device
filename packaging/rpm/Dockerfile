@@ -16,14 +16,20 @@ RUN groupadd builder \
 USER builder
 
 # This version must be identical to the version in pamoauth2device.spec
-ENV PACKAGE_VERSION=0.1.1
+ENV PACKAGE_VERSION=0.1
 
 WORKDIR /home/builder
 
 RUN mkdir -p rpmbuild/SOURCES \
  && cd rpmbuild/SOURCES \
- && curl -L -O https://github.com/jsurkont/pam_oauth2_device/archive/v${PACKAGE_VERSION}.tar.gz
+ && curl -L -O https://github.com/stfc/pam_oauth2_device/archive/v${PACKAGE_VERSION}.tar.gz
 
-COPY --chown=builder:builder pamoauth2device.spec .
+COPY pamoauth2device.spec .
+
+USER root
+
+RUN chown builder:builder pamoauth2device.spec
+
+USER builder
 
 RUN rpmbuild -ba pamoauth2device.spec
