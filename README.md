@@ -1,8 +1,12 @@
 # PAM module for OAuth 2.0 Device flow
 
-This module is...
+This is a PAM module that lets you log in via SSH to servers using OpenID Connect credentials, instead of SSH Keys or a username and password combination.
 
-A demo video is avaliable here:
+It uses the OAuth2 Device Flow, which means that during the login process, you will click a link and log in to your OpenID Connect Provider, which will then authenticate you for the SSH session. 
+
+This module will then check if you're in the right group(s) or have a specified username, and allow or deny access.
+
+A demo video is avaliable here: https://drive.google.com/file/d/1WzDRL0RFDXfvUgabbXNzBppV-DKXyUN1/view?usp=sharing
 
 ## Installation (SL/CentOS 7)
 
