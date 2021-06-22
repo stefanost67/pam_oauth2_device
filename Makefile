@@ -18,6 +18,7 @@ all: pam_oauth2_device.so
 pam_oauth2_device.so: $(objects)
 	$(CXX) -shared $^ $(LDLIBS) -o $@
 
+.PHONY: clean distclean
 clean:
 	rm -f $(objects)
 
@@ -27,3 +28,8 @@ distclean: clean
 install: pam_oauth2_device.so
 	install -D -t $(DESTDIR)$(PREFIX)/lib/security pam_oauth2_device.so
 	install -m 600 -D config_template.json $(DESTDIR)$(PREFIX)/etc/pam_oauth2_device/config.json
+
+.PHONY: test tests
+
+test tests:
+	make -C test
