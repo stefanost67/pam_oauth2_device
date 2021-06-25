@@ -340,7 +340,9 @@ void show_prompt(pam_handle_t *pamh,
 
 bool is_authorized(Config *config,
                    const char *username_local,
-                   Userinfo *userinfo)
+                   Userinfo *userinfo,
+                   // compatibility
+                   char const *metadata_path = nullptr)
 {
     const char *username_remote = userinfo->username.c_str();
     Metadata metadata;
@@ -351,7 +353,8 @@ bool is_authorized(Config *config,
 
         try
         {
-            metadata.load("/mnt/context/openstack/latest/meta_data.json");
+            constexpr const char *legacy_metadata_path = "/mnt/context/openstack/latest/meta_data.json";
+            metadata.load( metadata_path ? metadata_path : legacy_metadata_path);
         }
         catch (json::exception &e)
         {
