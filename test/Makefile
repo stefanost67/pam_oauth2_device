@@ -48,7 +48,7 @@ test_config.o: test_config.cpp $(GTEST_HEADERS) $(SRC_DIR)/include/config.hpp
 test_config: test_config.o $(SRC_DIR)/include/config.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(GTEST_LIBS) $^ -o $@
 
-unit: unit.o $(objects)
+unit: unit.o temp_file.o $(objects)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^  $(LDLIBS) $(GTEST_LIBS) -o $@
 
 test_pam_oauth2_device.o: test_pam_oauth2_device.cpp $(GTEST_HEADERS) $(SRC_DIR)/include/config.hpp $(SRC_DIR)/pam_oauth2_device.hpp
