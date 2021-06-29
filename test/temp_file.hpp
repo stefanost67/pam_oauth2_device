@@ -1,8 +1,8 @@
 //
-// Created by jens on 25/06/2021.
+// Created by jens.jensen@stfc.ac.uk on 25/06/2021.
 //
 // This class uses RAII to create a temporary file with a specific content.
-// This is used to create files for testing which are cleared after the test has finished.
+// This is used to create files for testing which are automatically cleared after the test has finished.
 
 
 #ifndef __PAM_OAUTH2_DEVICE_TEMP_FILE_HPP
@@ -17,8 +17,15 @@ private:
     constexpr static const size_t max_name_ = 24;
     char fname_[max_name_];
 public:
-    TempFile(std::string const &contents);
+    /** @brief construct file with given contents */
+//    TempFile(std::string const &contents);
+    /** @brief construct file with given contents */
     TempFile(char const *contents);
+    /** @brief construct file with given name and contents */
+    TempFile(char const *filename, char const *contents);
+    /** @brief construct file with given name and contents */
+//    TempFile(char const *filename, std::string const &contents);
+
     TempFile(TempFile const &) = delete;
     TempFile(TempFile &&) = delete;
     TempFile operator=(TempFile const &) = delete;
