@@ -32,8 +32,10 @@ public:
     TempFile &operator=(TempFile &&) = delete;
     ~TempFile();
 
-    /** Return the name of the file */
-    char const *filename() noexcept { return fname_; }
+    /** Return the full path/name of the file */
+    std::string filename() const;
+    /** Return the directory of the file */
+    std::string dirname() const;
 };
 
 

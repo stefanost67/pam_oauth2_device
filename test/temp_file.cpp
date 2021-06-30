@@ -1,5 +1,6 @@
 //
-// Created by jens on 25/06/2021.
+// Created by jens.jen@stfc.ac.uk on 25/06/2021.
+// Fairly Unix specific, but this was just designed to be a simple RAII file
 //
 
 #include "temp_file.hpp"
@@ -7,6 +8,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <exception>
+//#include <algorithm>
 
 
 // As it says on the label. Returns true if successful.
@@ -15,7 +18,7 @@ static bool write_data_to_file(FILE *fp, char const *data) noexcept;
 
 TempFile::TempFile(const char *contents)
 {
-    constexpr char const *tempname = "/tmp/pam_ouath2_XXXXXX";
+    constexpr char const *tempname = "/tmp/pam_oauth2_XXXXXX";
     static_assert(strlen(tempname) < max_name_);
     strncpy(fname_, tempname, max_name_);
     int fd = mkstemp(fname_);
@@ -72,6 +75,39 @@ TempFile::~TempFile()
     unlink(fname_);
 }
 
+
+std::string TempFile::filename() const
+{
+    std::string name{fname_};
+    // Temporary names would be full path but not necessarily constructed files
+    if(*name.cbegin() != '/') {
+        char buf[FILENAME_MAX];
+        char const *ret = getcwd(buf, FILENAME_MAX);
+        if(!ret)
+	    throw std::bad_alloc(); // can't happen?
+        std::string cwd{buf};
+        cwd += '/';
+        return cwd+name;
+    }
+    return name;
+}
+
+
+
+std::string
+TempFile::dirname() const
+{
+    char const *p = fname_, *q = strrchr(fname_, '/');
+    if(q) {
+        std::string path(fname_, q-p);
+        return path;
+    }
+    char buf[FILENAME_MAX];
+    if(!getcwd(buf, FILENAME_MAX))
+        throw std::bad_alloc();
+    std::string path(buf);
+    return path;
+}
 
 
 bool
