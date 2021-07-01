@@ -93,7 +93,7 @@ std::string TempFile::filename() const
 }
 
 
-
+// TODO CWD could change for relative named files
 std::string
 TempFile::dirname() const
 {
@@ -104,9 +104,8 @@ TempFile::dirname() const
     }
     char buf[FILENAME_MAX];
     if(!getcwd(buf, FILENAME_MAX))
-        throw std::bad_alloc();
-    std::string path(buf);
-    return path;
+        throw std::bad_alloc();  // can't happen
+    return  std::string(buf);
 }
 
 

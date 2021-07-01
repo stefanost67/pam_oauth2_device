@@ -8,10 +8,14 @@
 #include <string>
 #include <security/pam_appl.h>
 #include "config.hpp"
+#include "metadata.hpp"
 #include "pam_oauth2_device.hpp"
+#include "temp_file.hpp"
 #include <fstream>
 #include <algorithm>
 #include <iterator>
+#include <cstdlib>
+
 
 /* Helper function prototypes */
 
@@ -22,9 +26,19 @@
  */
 ssize_t cmp_file_string(char const *, std::string const &);
 
+enum class ConfigSection { TEST_CLOUD, TEST_GROUP, TEST_USERMAP, TEST_LDAP };
+
+/** \brief Make a dummy Config class for testing */
+Config make_dummy_config(ConfigSection, Userinfo const &);
+
+/** \brief make a dummy userinfo class */
+Userinfo make_dummy_userinfo(std::string const &);
+
+/** Test function for cloud section of is_authorized() */
+bool is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups);
 
 
-/* prototypes for "private" (compilation unit) functions */
+/* copied prototypes for "private" (compilation unit) functions from pam_oauth2_device.cpp */
 std::string getQr(const char *text, const int ecc = 0, const int border = 1);
 
 class DeviceAuthResponse;
@@ -52,7 +66,8 @@ void show_prompt(pam_handle_t *pamh,
 
 bool is_authorized(Config *config,
 		   const char *username_local,
-		   Userinfo *userinfo);
+		   Userinfo *userinfo,
+		   char const *metadata_path = nullptr);
 
 
 TEST(PamOAuth2Unit, QrCodeTest)
@@ -69,7 +84,19 @@ EXPECT_EQ(cmp_file_string("data/qr2.1.txt", getQr(text, 1, 1)), -1);
 EXPECT_EQ(cmp_file_string("data/qr2.2.txt", getQr(text, 2, 1)), -1);
 }
 
-
+TEST(PamOAuth2Unit, IsAuthorized)
+{
+    Userinfo ui{make_dummy_userinfo("fred")};
+    std::vector<std::string> groups;
+    // No groups
+EXPECT_TRUE( !is_authorized_cloud(ui, "fred", groups));
+// Groups, correct username
+groups.push_back("bleps");
+groups.push_back("plamf");
+EXPECT_TRUE( is_authorized_cloud(ui, "fred", groups));
+// Right groups, wrong username
+EXPECT_TRUE( !is_authorized_cloud(ui, "barney", groups));
+}
 
 
 ssize_t
@@ -92,4 +119,81 @@ cmp_file_string(char const *filename, std::string const &string)
         }
     }
     return -1;    // match
+}
+
+
+
+Config
+make_dummy_config(ConfigSection section, Userinfo const &ui)
+{
+    Config cf;
+    // All members are public! and have no explicit initialisers
+    // Boolean selectors of test section
+    cf.cloud_access = cf.group_access = false;
+    switch (section) {
+	case ConfigSection::TEST_CLOUD:
+	    cf.cloud_access = true;
+	    // The following three variables are needed: cloud_username, local_username_suffix, cloud_endpoint
+	    cf.local_username_suffix = ".test";
+	    cf.cloud_username = ui.username + cf.local_username_suffix;
+	    // endpoint is set later as we don't know it yet
+	    break;
+	case ConfigSection::TEST_GROUP:
+	    cf.group_access = true;
+	    break;
+	case ConfigSection::TEST_LDAP:
+	    break;
+	case ConfigSection::TEST_USERMAP:
+	    break;
+	// no default
+    }
+    return cf;
+}
+
+
+Userinfo
+make_dummy_userinfo(std::string const &username)
+{
+    Userinfo ui;
+    ui.sub = "0123456789abcdef";
+    ui.username = username.empty() ? "jdoe" : username;
+    ui.name = "J. Doe";
+    ui.groups.push_back("bleps");
+    ui.groups.push_back("splomp");
+    ui.groups.push_back("plempf");
+    return ui;
+}
+
+
+
+Metadata
+make_dummy_metadata()
+{
+    Metadata md;
+    // This is currently a public member! but will not test the load function
+    md.project_id = "iristest";
+    return md;
+}
+
+
+bool
+is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups)
+{
+    Config cf{make_dummy_config(ConfigSection::TEST_CLOUD, ui)};
+    TempFile metadata("{\"project_id\":\"iristest\"}");
+    // Slightly hacky JSON construction
+    std::string contents{"{\"groups\":[\""};
+    if(!groups.empty()) {
+        auto end = groups.cend()-1;
+	std::for_each(groups.cbegin(), end, [&contents](std::string const &grp) { contents += grp; contents += "\",\""; });
+        contents += *end;
+    }
+    contents += "\"]}";
+    // The project id is the name of the file
+    TempFile cloud( "iristest", contents.c_str()); // FIXME should take a string constructor
+    // curl can read a local file!
+    cf.cloud_endpoint = "file://" +  cloud.dirname();
+    // Finally, call the function.
+    bool ret = is_authorized(&cf, username_local, &ui, metadata.filename().c_str());
+    return ret;
 }
