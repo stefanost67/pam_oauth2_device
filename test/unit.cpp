@@ -17,8 +17,6 @@
 #include <cstdlib>
 
 
-/* Helper function prototypes */
-
 /** \brief Check whether the contents of a file matches exactly that of the string being passed to it
  * \param filename - the name of the file to be scanned relative to CWD
  * \param string - the string to compare
@@ -36,6 +34,9 @@ Userinfo make_dummy_userinfo(std::string const &);
 
 /** Test function for cloud section of is_authorized() */
 bool is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups);
+
+/** Test function for group section of is_authorized() */
+bool is_authorized_group(Userinfo &ui, char const *username_local, char const *service_name, std::vector<std::string> const &groups);
 
 
 /* copied prototypes for "private" (compilation unit) functions from pam_oauth2_device.cpp */
@@ -87,8 +88,11 @@ EXPECT_EQ(cmp_file_string("data/qr2.2.txt", getQr(text, 2, 1)), -1);
 TEST(PamOAuth2Unit, IsAuthorized)
 {
     Userinfo ui{make_dummy_userinfo("fred")};
+    // groups denotes the groups assigned to the project id
     std::vector<std::string> groups;
-    // No groups
+    // No or wrong groups, right username
+EXPECT_TRUE( !is_authorized_cloud(ui, "fred", groups));
+groups.push_back("sknamp");
 EXPECT_TRUE( !is_authorized_cloud(ui, "fred", groups));
 // Groups, correct username
 groups.push_back("bleps");
@@ -96,6 +100,15 @@ groups.push_back("plamf");
 EXPECT_TRUE( is_authorized_cloud(ui, "fred", groups));
 // Right groups, wrong username
 EXPECT_TRUE( !is_authorized_cloud(ui, "barney", groups));
+// Now for the groups test, starting with a service name which is not one of fred's groups
+EXPECT_TRUE(!is_authorized_group(ui, "fred", "bylzp", groups));
+// service name is one of fred's Userinfo groups but not in groups, and fred's name is wrong
+EXPECT_TRUE(!is_authorized_group(ui, "wilma", "plempf", groups));
+// service name is one of fred's Userinfo groups but not in project_id groups
+EXPECT_TRUE(is_authorized_group(ui, "fred", "plempf", groups));
+// service name is in groups but not in fred's Userinfo groups
+EXPECT_TRUE(!is_authorized_group(ui, "fred", "plamf", groups));
+
 }
 
 
@@ -127,7 +140,7 @@ Config
 make_dummy_config(ConfigSection section, Userinfo const &ui)
 {
     Config cf;
-    // All members are public! and have no explicit initialisers
+    // All members are public! and have no non-default initialisers
     // Boolean selectors of test section
     cf.cloud_access = cf.group_access = false;
     switch (section) {
@@ -176,24 +189,42 @@ make_dummy_metadata()
 }
 
 
+std::string
+make_groups_json(std::vector<std::string> const &groups)
+{
+    // Slightly hacky JSON construction
+    std::string contents{"{\"groups\":[\""};
+    if(!groups.empty()) {
+	auto end = groups.cend()-1;
+	std::for_each(groups.cbegin(), end, [&contents](std::string const &grp) { contents += grp; contents += "\",\""; });
+	contents += *end;
+    }
+    contents += "\"]}";
+    return contents;
+}
+
+
 bool
 is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups)
 {
     Config cf{make_dummy_config(ConfigSection::TEST_CLOUD, ui)};
     TempFile metadata("{\"project_id\":\"iristest\"}");
-    // Slightly hacky JSON construction
-    std::string contents{"{\"groups\":[\""};
-    if(!groups.empty()) {
-        auto end = groups.cend()-1;
-	std::for_each(groups.cbegin(), end, [&contents](std::string const &grp) { contents += grp; contents += "\",\""; });
-        contents += *end;
-    }
-    contents += "\"]}";
-    // The project id is the name of the file
+    std::string contents{make_groups_json(groups)};
+   // The project id is the name of the file
     TempFile cloud( "iristest", contents.c_str()); // FIXME should take a string constructor
     // curl can read a local file!
     cf.cloud_endpoint = "file://" +  cloud.dirname();
     // Finally, call the function.
     bool ret = is_authorized(&cf, username_local, &ui, metadata.filename().c_str());
     return ret;
+}
+
+
+
+bool
+is_authorized_group(Userinfo &ui, char const *username_local, char const *service_name, std::vector<std::string> const &groups)
+{
+    Config cf{make_dummy_config(ConfigSection::TEST_GROUP, ui)};
+    cf.group_service_name = service_name;     // gets copied (string constructor)
+    return is_authorized(&cf, username_local, &ui, nullptr);
 }
