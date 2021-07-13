@@ -25,7 +25,8 @@ public:
         group_service_name,
         cloud_endpoint,
         cloud_username,
-        local_username_suffix;
+        local_username_suffix,
+        project_id_file;
     int qr_error_correction_level;
     bool group_access,
          cloud_access,

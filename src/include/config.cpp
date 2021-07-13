@@ -21,6 +21,7 @@ void Config::load(const char *path)
     username_attribute = j.at("oauth").at("username_attribute").get<std::string>();
     local_username_suffix = j.at("oauth").at("local_username_suffix").get<std::string>();
     qr_error_correction_level = j.at("qr").at("error_correction_level").get<int>();
+    project_id_file = j.at("cloud").at("project_id_file").get<std::string>();
 
     if (j.find("cloud") != j.end()) {
         cloud_access = j.at("cloud").at("access").get<bool>();

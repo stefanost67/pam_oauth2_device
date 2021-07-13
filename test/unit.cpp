@@ -1,5 +1,5 @@
 /************************************************************
- * *** Unit testing for pam_oauth2_device
+ * *** Unit and correctness testing for pam_oauth2_device
  * Normally we test the public API but in this case we need to test the private API as well
  */
 
@@ -150,6 +150,7 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
 	    cf.local_username_suffix = ".test";
 	    cf.cloud_username = ui.username + cf.local_username_suffix;
 	    // endpoint is set later as we don't know it yet
+	    // project_id_file is set later as we don't know it yet
 	    break;
 	case ConfigSection::TEST_GROUP:
 	    cf.group_access = true;
@@ -209,13 +210,13 @@ is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::s
 {
     Config cf{make_dummy_config(ConfigSection::TEST_CLOUD, ui)};
     TempFile metadata("{\"project_id\":\"iristest\"}");
-    std::string contents{make_groups_json(groups)};
-   // The project id is the name of the file
-    TempFile cloud( "iristest", contents.c_str()); // FIXME should take a string constructor
+    cf.project_id_file = metadata.filename();
+    // The project id is the name of the file
+    TempFile cloud( "iristest", make_groups_json(groups));
     // curl can read a local file!
     cf.cloud_endpoint = "file://" +  cloud.dirname();
-    // Finally, call the function.
-    bool ret = is_authorized(&cf, username_local, &ui, metadata.filename().c_str());
+    // Finally, call the function.  The project id file should be passed in with the config
+    bool ret = is_authorized(&cf, username_local, &ui);
     return ret;
 }
 

@@ -18,7 +18,7 @@ all: pam_oauth2_device.so
 pam_oauth2_device.so: $(objects)
 	$(CXX) -shared $^ $(LDLIBS) -o $@
 
-.PHONY: clean distclean
+.PHONY: clean distclean install
 clean:
 	rm -f $(objects)
 

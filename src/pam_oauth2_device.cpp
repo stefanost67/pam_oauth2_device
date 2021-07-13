@@ -10,6 +10,7 @@
 #include <iostream>
 #include <string>
 #include <regex>
+#include <cstdio>
 
 #include "include/config.hpp"
 #include "include/metadata.hpp"
@@ -25,7 +26,7 @@ class BaseError : public std::exception
 public:
     const char *what() const throw()
     {
-        printf("Base error");
+        puts("Base error");
         return "Base Error";
     }
 };
@@ -35,7 +36,7 @@ class PamError : public BaseError
 public:
     const char *what() const throw()
     {
-        printf("PAM error");
+        puts("PAM error");
         return "PAM Error";
     }
 };
@@ -45,7 +46,7 @@ class NetworkError : public BaseError
 public:
     const char *what() const throw()
     {
-        printf("Network error");
+        puts("Network error");
         return "Network Error";
     }
 };
@@ -55,7 +56,7 @@ class TimeoutError : public NetworkError
 public:
     const char *what() const throw()
     {
-        printf("Timeout error");
+        puts("Timeout error");
         return "Timeout Error";
     }
 };
@@ -65,7 +66,7 @@ class ResponseError : public NetworkError
 public:
     const char *what() const throw()
     {
-        printf("Response error");
+        puts("Response error");
         return "Response Error";
     }
 };
@@ -173,7 +174,7 @@ void make_authorization_request(const char *client_id,
         throw NetworkError();
     try
     {
-        printf(readBuffer.c_str());
+        puts(readBuffer.c_str());
         auto data = json::parse(readBuffer);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -233,7 +234,7 @@ void poll_for_token(const char *client_id,
             throw NetworkError();
         try
         {
-            printf(readBuffer.c_str());
+            puts(readBuffer.c_str());
             data = json::parse(readBuffer);
             if (data["error"].empty())
             {
@@ -288,7 +289,7 @@ void get_userinfo(const char *userinfo_endpoint,
         throw NetworkError();
     try
     {
-        printf(readBuffer.c_str());
+        puts(readBuffer.c_str());
         auto data = json::parse(readBuffer);
         userinfo->sub = data.at("sub");
         userinfo->username = data.at(username_attribute);
@@ -353,8 +354,18 @@ bool is_authorized(Config *config,
 
         try
         {
+            // The default path for the project_id file was hardcoded into previous versions
             constexpr const char *legacy_metadata_path = "/mnt/context/openstack/latest/meta_data.json";
-            metadata.load( metadata_path ? metadata_path : legacy_metadata_path);
+            if(!metadata_path) {
+                if(config->project_id_file.empty()) {
+		    fputs("Warning: using hardwired legacy project_id file (configure cloud->project_id_file in config)\n",
+			  stderr);
+		    metadata_path = legacy_metadata_path;
+		} else {
+                    metadata_path = config->project_id_file.c_str();
+                }
+            }
+            metadata.load( metadata_path );
         }
         catch (json::exception &e)
         {
@@ -379,7 +390,7 @@ bool is_authorized(Config *config,
             throw NetworkError();
         try
         {
-            printf(readBuffer.c_str());
+            puts(readBuffer.c_str());
             auto data = json::parse(readBuffer);
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             for (auto &group : groups)
