@@ -30,7 +30,7 @@
         "endpoint": "http://host-172-16-114-198.nubes.stfc.ac.uk",
         "username": "root",
         "access": false,
-	"project_id_file": "project_id.json"
+	"metadata_file": "metadata.json"
     },
     "users": {
         "provider_user_id_1":

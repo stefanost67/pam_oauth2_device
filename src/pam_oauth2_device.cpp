@@ -354,15 +354,15 @@ bool is_authorized(Config *config,
 
         try
         {
-            // The default path for the project_id file was hardcoded into previous versions
+            // The default path for the metadata file (containing project_id) was hardcoded into previous versions
             constexpr const char *legacy_metadata_path = "/mnt/context/openstack/latest/meta_data.json";
             if(!metadata_path) {
-                if(config->project_id_file.empty()) {
-		    fputs("Warning: using hardwired legacy project_id file (configure cloud->project_id_file in config)\n",
+                if(config->metadata_file.empty()) {
+		    fputs("Warning: using hardwired legacy metadata (configure \"metadata_file\" in the \"cloud\" section in config)\n",
 			  stderr);
 		    metadata_path = legacy_metadata_path;
 		} else {
-                    metadata_path = config->project_id_file.c_str();
+                    metadata_path = config->metadata_file.c_str();
                 }
             }
             metadata.load( metadata_path );

@@ -150,7 +150,7 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
 	    cf.local_username_suffix = ".test";
 	    cf.cloud_username = ui.username + cf.local_username_suffix;
 	    // endpoint is set later as we don't know it yet
-	    // project_id_file is set later as we don't know it yet
+	    // metadata_file is set later as we don't know it yet
 	    break;
 	case ConfigSection::TEST_GROUP:
 	    cf.group_access = true;
@@ -210,7 +210,7 @@ is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::s
 {
     Config cf{make_dummy_config(ConfigSection::TEST_CLOUD, ui)};
     TempFile metadata("{\"project_id\":\"iristest\"}");
-    cf.project_id_file = metadata.filename();
+    cf.metadata_file = metadata.filename();
     // The project id is the name of the file
     TempFile cloud( "iristest", make_groups_json(groups));
     // curl can read a local file!
