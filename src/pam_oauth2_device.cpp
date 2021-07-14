@@ -348,9 +348,18 @@ bool is_authorized(Config *config,
     const char *username_remote = userinfo->username.c_str();
     Metadata metadata;
 
+    // utility username check used by cloud_access and group_access
+    auto check_username = [&config](std::string const &remote, std::string local) -> bool
+    {
+	local += config->local_username_suffix;
+	return remote == local;
+    };
+
     // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
     if (config->cloud_access)
     {
+	if(!check_username(config->cloud_username, username_local))
+	    return false;
 
         try
         {
@@ -414,6 +423,9 @@ bool is_authorized(Config *config,
     // Try to authorize againt group name in userinfo
     if (config->group_access)
     {
+        if(!check_username(username_local, username_remote))
+            return false;
+
         for (auto &group : userinfo->groups)
         {
             // is service name in group name? THEN do the split, otherwise ignore
