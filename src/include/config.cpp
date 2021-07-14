@@ -21,12 +21,15 @@ void Config::load(const char *path)
     username_attribute = j.at("oauth").at("username_attribute").get<std::string>();
     local_username_suffix = j.at("oauth").at("local_username_suffix").get<std::string>();
     qr_error_correction_level = j.at("qr").at("error_correction_level").get<int>();
-    project_id_file = j.at("cloud").at("project_id_file").get<std::string>();
 
     if (j.find("cloud") != j.end()) {
-        cloud_access = j.at("cloud").at("access").get<bool>();
-        cloud_endpoint = j.at("cloud").at("endpoint").get<std::string>();
-        cloud_username = j.at("cloud").at("username").get<std::string>();
+        auto cloud_section = j.at("cloud");
+        cloud_access = cloud_section.at("access").get<bool>();
+        cloud_endpoint = cloud_section.at("endpoint").get<std::string>();
+        cloud_username = cloud_section.at("username").get<std::string>();
+	// Absent in older config files
+	if(cloud_section.find("metadata_file") != cloud_section.end())
+	    metadata_file = cloud_section.at("metadata_file").get<std::string>();
     }
 
     if (j.find("group") != j.end())
