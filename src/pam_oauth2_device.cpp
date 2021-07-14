@@ -295,6 +295,7 @@ void get_userinfo(const char *userinfo_endpoint,
         userinfo->username = data.at(username_attribute);
         userinfo->name = data.at("name");
         userinfo->groups = data.at("groups").get<std::vector<std::string>>();
+	std::sort(userinfo->groups.begin(), userinfo->groups.end());
     }
     catch (json::exception &e)
     {
@@ -402,17 +403,17 @@ bool is_authorized(Config *config,
             puts(readBuffer.c_str());
             auto data = json::parse(readBuffer);
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
-            for (auto &group : groups)
-            {
-                for (auto &user_group : userinfo->groups)
-                {
-                    if (group.compare(user_group) == 0 && config->cloud_username.compare(std::string(username_local) + config->local_username_suffix) == 0)
-                    {
-                        // One of the users IRIS IAM groups matches one of the project groups, and they are trying to login with a valid username
-                        return true;
-                    }
-                }
-            }
+            std::sort(groups.begin(), groups.end());
+
+	    // If server's view of groups overlaps with the user's groups (userinfo->groups already sorted)
+	    std::vector<std::string> const &user_groups = userinfo->groups;
+	    std::vector<std::string> target;
+	    // Intersection is tidier but needs both its entries to be sorted
+	    std::set_intersection(groups.cbegin(), groups.cend(), user_groups.cbegin(), user_groups.cend(),
+				  // no CTAD in C++11
+				  std::back_insert_iterator<std::vector<std::string>>(target));
+
+	    return !target.empty();
         }
         catch (json::exception &e)
         {
@@ -420,35 +421,13 @@ bool is_authorized(Config *config,
         }
     }
 
-    // Try to authorize againt group name in userinfo
+    // Try to authorize against group name in userinfo
     if (config->group_access)
     {
         if(!check_username(username_local, username_remote))
             return false;
 
-        for (auto &group : userinfo->groups)
-        {
-            // is service name in group name? THEN do the split, otherwise ignore
-            //if (group.find(config->group_service_name) != std::string::npos)
-            if (group.compare(config->group_service_name) == 0)
-            {
-                /*std::regex reg("/");
-
-                std::sregex_token_iterator iter(group.begin(), group.end(), reg, -1);
-                std::sregex_token_iterator end;
-
-                std::vector<std::string> vec(iter, end);
-
-                // Check if our service name matches the group service name AND the local username matches the group service username
-                if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0)
-                {
-                    return true;
-                }*/
-                if (std::string(username_local).compare(std::string(username_remote) + config->local_username_suffix) == 0) {
-                    return true;
-                }
-            }
-        }
+        return std::binary_search(userinfo->groups.cbegin(), userinfo->groups.cend(), config->group_service_name);
     }
 
     // Try to authorize against local config

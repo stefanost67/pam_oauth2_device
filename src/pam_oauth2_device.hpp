@@ -9,6 +9,7 @@ public:
     std::string sub,
         username,
         name;
+    // groups will be sorted alphabetically
     std::vector<std::string> groups;
 };
 
