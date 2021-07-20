@@ -424,7 +424,7 @@ bool is_authorized(Config *config,
     // Try to authorize against group name in userinfo
     if (config->group_access)
     {
-        if(!check_username(username_local, username_remote))
+        if(!check_username(username_remote, username_local))
             return false;
 
         return std::binary_search(userinfo->groups.cbegin(), userinfo->groups.cend(), config->group_service_name);
