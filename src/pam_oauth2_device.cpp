@@ -9,7 +9,7 @@
 #include <iterator>
 #include <iostream>
 #include <string>
-#include <regex>
+//#include <regex>
 #include <cstdio>
 
 #include "include/config.hpp"
@@ -70,6 +70,42 @@ public:
         return "Response Error";
     }
 };
+
+
+void Userinfo::add_group(const std::string &group)
+{
+    // there doesn't seem to be an insert for sorted sequences? anyway, it's not hugely important here
+    groups_.push_back(group);
+    std::sort(groups_.begin(), groups_.end());
+}
+
+void Userinfo::set_groups(const std::vector<std::string> &groups)
+{
+    groups_ = groups;    // copies vector and strings
+    std::sort(groups_.begin(), groups_.end());
+}
+
+
+bool Userinfo::is_member(const std::string &group) const
+{
+    return std::binary_search(groups_.cbegin(), groups_.cend(), group);
+}
+
+
+bool Userinfo::intersects(std::vector<std::string>::const_iterator beg, std::vector<std::string>::const_iterator end) const
+{
+    if(!std::is_sorted(beg, end))
+        throw "Cannot happen IYWHQ";
+    std::vector<std::string> target;
+    // Intersection is tidier but needs both its entries to be sorted
+    std::set_intersection(groups_.cbegin(), groups_.cend(), beg, end,
+	    // no CTAD in C++11
+			  std::back_insert_iterator<std::vector<std::string>>(target));
+
+    return !target.empty();
+
+}
+
 
 std::string getQr(const char *text, const int ecc = 0, const int border = 1)
 {
@@ -261,10 +297,11 @@ void poll_for_token(const char *client_id,
     }
 }
 
-void get_userinfo(const char *userinfo_endpoint,
-                  const char *token,
-                  const char *username_attribute,
-                  Userinfo *userinfo)
+
+Userinfo
+get_userinfo(const char *userinfo_endpoint,
+	     const char *token,
+	     const char *username_attribute)
 {
     CURL *curl;
     CURLcode res;
@@ -291,11 +328,9 @@ void get_userinfo(const char *userinfo_endpoint,
     {
         puts(readBuffer.c_str());
         auto data = json::parse(readBuffer);
-        userinfo->sub = data.at("sub");
-        userinfo->username = data.at(username_attribute);
-        userinfo->name = data.at("name");
-        userinfo->groups = data.at("groups").get<std::vector<std::string>>();
-	std::sort(userinfo->groups.begin(), userinfo->groups.end());
+        Userinfo ui(data.at("sub"), data.at(username_attribute), data.at("name"));
+        ui.set_groups( data.at("groups").get<std::vector<std::string>>() );
+        return ui;
     }
     catch (json::exception &e)
     {
@@ -342,11 +377,11 @@ void show_prompt(pam_handle_t *pamh,
 
 bool is_authorized(Config *config,
                    const char *username_local,
-                   Userinfo *userinfo,
+                   Userinfo const &userinfo,
                    // compatibility
                    char const *metadata_path = nullptr)
 {
-    const char *username_remote = userinfo->username.c_str();
+    const char *username_remote = userinfo.username().c_str();
     Metadata metadata;
 
     // utility username check used by cloud_access and group_access
@@ -405,15 +440,8 @@ bool is_authorized(Config *config,
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             std::sort(groups.begin(), groups.end());
 
-	    // If server's view of groups overlaps with the user's groups (userinfo->groups already sorted)
-	    std::vector<std::string> const &user_groups = userinfo->groups;
-	    std::vector<std::string> target;
-	    // Intersection is tidier but needs both its entries to be sorted
-	    std::set_intersection(groups.cbegin(), groups.cend(), user_groups.cbegin(), user_groups.cend(),
-				  // no CTAD in C++11
-				  std::back_insert_iterator<std::vector<std::string>>(target));
-
-	    return !target.empty();
+	    // If server's view of groups overlaps with the user's groups (userinfo.groups already sorted)
+	    return userinfo.intersects(groups.cbegin(), groups.cend());
         }
         catch (json::exception &e)
         {
@@ -424,10 +452,8 @@ bool is_authorized(Config *config,
     // Try to authorize against group name in userinfo
     if (config->group_access)
     {
-        if(!check_username(username_remote, username_local))
-            return false;
-
-        return std::binary_search(userinfo->groups.cbegin(), userinfo->groups.cend(), config->group_service_name);
+	return check_username(userinfo.username(), username_local)
+	       && userinfo.is_member(config->group_service_name);
     }
 
     // Try to authorize against local config
@@ -475,7 +501,6 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     std::string token;
     Config config;
     DeviceAuthResponse device_auth_response;
-    Userinfo userinfo;
 
     try
     {
@@ -498,8 +523,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         poll_for_token(config.client_id.c_str(), config.client_secret.c_str(),
                        config.token_endpoint.c_str(),
                        device_auth_response.device_code.c_str(), token);
-        get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
-                     config.username_attribute.c_str(), &userinfo);
+        Userinfo ui{get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
+				 config.username_attribute.c_str())};
+	if (is_authorized(&config, username_local, ui))
+	    return PAM_SUCCESS;
     }
     catch (PamError &e)
     {
@@ -514,7 +541,5 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         return PAM_AUTH_ERR;
     }
 
-    if (is_authorized(&config, username_local, &userinfo))
-        return PAM_SUCCESS;
     return PAM_AUTH_ERR;
 }

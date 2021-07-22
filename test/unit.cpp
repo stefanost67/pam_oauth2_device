@@ -31,7 +31,7 @@ enum class ConfigSection { TEST_CLOUD, TEST_GROUP, TEST_USERMAP, TEST_LDAP };
 Config make_dummy_config(ConfigSection, Userinfo const &);
 
 /** \brief make a dummy userinfo class */
-Userinfo make_dummy_userinfo(std::string const &);
+Userinfo make_dummy_userinfo(std::string const &username);
 
 /** Test function for cloud section of is_authorized() */
 bool is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups);
@@ -57,10 +57,9 @@ void poll_for_token(const char *client_id,
 		    const char *device_code,
 		    std::string &token);
 
-void get_userinfo(const char *userinfo_endpoint,
-		  const char *token,
-		  const char *username_attribute,
-		  Userinfo *userinfo);
+Userinfo get_userinfo(const char *userinfo_endpoint,
+		      const char *token,
+		      const char *username_attribute);
 
 void show_prompt(pam_handle_t *pamh,
 		 int qr_error_correction_level,
@@ -68,7 +67,7 @@ void show_prompt(pam_handle_t *pamh,
 
 bool is_authorized(Config *config,
 		   const char *username_local,
-		   Userinfo *userinfo,
+		   Userinfo const &userinfo,
 		   char const *metadata_path = nullptr);
 
 
@@ -101,18 +100,18 @@ groups.push_back("bleps");
 groups.push_back("plamf");
 // Check groups is sorted
 std::sort(groups.begin(), groups.end());
+// One group is right, username is right
 EXPECT_TRUE( is_authorized_cloud(ui, "fred", groups));
 // Right groups, wrong username
 EXPECT_TRUE( !is_authorized_cloud(ui, "barney", groups));
 // Now for the groups test, starting with a service name which is not one of fred's groups
 EXPECT_TRUE(!is_authorized_group(ui, "fred", "bylzp", groups));
-// service name is one of fred's Userinfo groups but not in groups, and fred's name is wrong
+// service name is one of fred's Userinfo groups but not in groups, and but username is different
 EXPECT_TRUE(!is_authorized_group(ui, "wilma", "plempf", groups));
 // service name is one of fred's Userinfo groups but not in project_id groups
 EXPECT_TRUE(is_authorized_group(ui, "fred", "plempf", groups));
-// service name is in groups but not in fred's Userinfo groups
+// service name is in project_id groups but not in fred's Userinfo groups
 EXPECT_TRUE(!is_authorized_group(ui, "fred", "plamf", groups));
-
 }
 
 
@@ -152,7 +151,8 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
 	case ConfigSection::TEST_CLOUD:
 	    cf.cloud_access = true;
 	    // The following three variables are needed: cloud_username, local_username_suffix, cloud_endpoint
-	    cf.cloud_username = ui.username;
+	    // "cloud username" is the remote username
+	    cf.cloud_username = "fred.test";
 	    // endpoint is set later as we don't know it yet
 	    // metadata_file is set later as we don't know it yet
 	    break;
@@ -172,14 +172,14 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
 Userinfo
 make_dummy_userinfo(std::string const &username)
 {
-    Userinfo ui;
-    ui.sub = "0123456789abcdef";
-    ui.username = username.empty() ? "jdoe" : username;
-    ui.name = "J. Doe";
-    // Note groups are sorted alphabetically
-    ui.groups.push_back("bleps");
-    ui.groups.push_back("plempf");
-    ui.groups.push_back("splomp");
+    Userinfo ui{"0123456789abcdef", username, "jdoe"};
+    // Note groups are not added alphabetically
+    ui.add_group("splomp");
+    ui.add_group("plempf");
+    ui.add_group("bleps");
+    auto const &b = ui.groups();
+    if(!std::is_sorted(b.cbegin(), b.cend()))
+        std::cerr << "groups are not sorted!\n";
     return ui;
 }
 
@@ -220,9 +220,9 @@ is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::s
     TempFile cloud( "iristest", make_groups_json(groups));
     // curl can read a local file!
     cf.cloud_endpoint = "file://" +  cloud.dirname();
-    // Finally, call the function.  The project id file should be passed in with the config
-    bool ret = is_authorized(&cf, username_local, &ui);
-    return ret;
+    // The project id file should be passed in with the config.
+    // Destructors are not called until the call has returned (so c_str()s are safe)
+    return is_authorized(&cf, username_local, ui);
 }
 
 
@@ -232,5 +232,5 @@ is_authorized_group(Userinfo &ui, char const *username_local, char const *servic
 {
     Config cf{make_dummy_config(ConfigSection::TEST_GROUP, ui)};
     cf.group_service_name = service_name;     // gets copied (string constructor)
-    return is_authorized(&cf, username_local, &ui, nullptr);
+    return is_authorized(&cf, username_local, ui, nullptr /* only needed for cloud */);
 }
