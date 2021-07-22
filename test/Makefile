@@ -21,8 +21,7 @@ objects = $(SRC_DIR)/pam_oauth2_device.o \
 		  $(SRC_DIR)/include/metadata.o \
 		  $(SRC_DIR)/include/nayuki/BitBuffer.o \
 		  $(SRC_DIR)/include/nayuki/QrCode.o \
-		  $(SRC_DIR)/include/nayuki/QrSegment.o \
-		  test_pam_oauth2_device.o
+		  $(SRC_DIR)/include/nayuki/QrSegment.o
 
 all: $(TESTS)
 	for test in $(TESTS); do ./$${test}; done
@@ -31,7 +30,7 @@ all: $(TESTS)
 .PHONY: clean distclean
 
 clean:
-	rm -f gtest.a gtest_main.a *.o $(objects)
+	rm -f gtest.a gtest_main.a *.o $(objects) unit.o temp_file.o test_pam_oauth2_device.o
 
 distclean: clean
 	rm -f $(TESTS)
@@ -54,5 +53,5 @@ unit: unit.o temp_file.o $(objects)
 test_pam_oauth2_device.o: test_pam_oauth2_device.cpp $(GTEST_HEADERS) $(SRC_DIR)/include/config.hpp $(SRC_DIR)/pam_oauth2_device.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I$(SRC_DIR) $(LDLIBS) -c test_pam_oauth2_device.cpp
 
-test_pam_oauth2_device: $(objects)
+test_pam_oauth2_device: test_pam_oauth2_device.o $(objects)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(GTEST_LIBS)  $^ $(LDLIBS) -o $@

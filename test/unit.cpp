@@ -1,6 +1,7 @@
 /************************************************************
  * *** Unit and correctness testing for pam_oauth2_device
  * Normally we test the public API but in this case we need to test the private API as well
+ * jens.jensen@stfc.ac.uk
  */
 
 #include <gtest/gtest.h>
@@ -22,7 +23,7 @@
  * \param string - the string to compare
  * @return -1 if matching, -1000 if file is absent; or location of first mismatch if not matching
  */
-ssize_t cmp_file_string(char const *, std::string const &);
+ssize_t cmp_file_string(char const *filename, std::string const &string);
 
 enum class ConfigSection { TEST_CLOUD, TEST_GROUP, TEST_USERMAP, TEST_LDAP };
 
@@ -87,7 +88,8 @@ EXPECT_EQ(cmp_file_string("data/qr2.2.txt", getQr(text, 2, 1)), -1);
 
 TEST(PamOAuth2Unit, IsAuthorized)
 {
-    Userinfo ui{make_dummy_userinfo("fred")};
+    // Userinfo contains the remote username. Note the suffix is (or will be) configured as ".test" to match a local username "fred"
+    Userinfo ui{make_dummy_userinfo("fred.test")};
     // groups denotes the groups assigned to the project id
     std::vector<std::string> groups;
     // No or wrong groups, right username
@@ -97,6 +99,8 @@ EXPECT_TRUE( !is_authorized_cloud(ui, "fred", groups));
 // Groups, correct username
 groups.push_back("bleps");
 groups.push_back("plamf");
+// Check groups is sorted
+std::sort(groups.begin(), groups.end());
 EXPECT_TRUE( is_authorized_cloud(ui, "fred", groups));
 // Right groups, wrong username
 EXPECT_TRUE( !is_authorized_cloud(ui, "barney", groups));
@@ -143,12 +147,12 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
     // All members are public! and have no non-default initialisers
     // Boolean selectors of test section
     cf.cloud_access = cf.group_access = false;
+    cf.local_username_suffix = ".test";
     switch (section) {
 	case ConfigSection::TEST_CLOUD:
 	    cf.cloud_access = true;
 	    // The following three variables are needed: cloud_username, local_username_suffix, cloud_endpoint
-	    cf.local_username_suffix = ".test";
-	    cf.cloud_username = ui.username + cf.local_username_suffix;
+	    cf.cloud_username = ui.username;
 	    // endpoint is set later as we don't know it yet
 	    // metadata_file is set later as we don't know it yet
 	    break;
@@ -172,9 +176,10 @@ make_dummy_userinfo(std::string const &username)
     ui.sub = "0123456789abcdef";
     ui.username = username.empty() ? "jdoe" : username;
     ui.name = "J. Doe";
+    // Note groups are sorted alphabetically
     ui.groups.push_back("bleps");
-    ui.groups.push_back("splomp");
     ui.groups.push_back("plempf");
+    ui.groups.push_back("splomp");
     return ui;
 }
 
