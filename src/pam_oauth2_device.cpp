@@ -381,7 +381,8 @@ bool is_authorized(Config *config,
                    // compatibility
                    char const *metadata_path = nullptr)
 {
-    const char *username_remote = userinfo.username().c_str();
+    std::string uname = userinfo.username();
+    const char *username_remote = uname.c_str();
     Metadata metadata;
 
     // utility username check used by cloud_access and group_access
@@ -456,13 +457,13 @@ bool is_authorized(Config *config,
 	       && userinfo.is_member(config->group_service_name);
     }
 
-    // Try to authorize against local config
-    if (config->usermap.count(username_remote) > 0)
+    // Try to authorize against local config, looking for the remote username...
+    std::map<std::string,std::set<std::string>>::const_iterator local = config->usermap.find(userinfo.username());
+    // if present, check if it contains the local username(s)
+    if(local != config->usermap.cend())
     {
-        if (config->usermap[username_remote].count(username_local) > 0)
-        {
-            return true;
-        }
+        std::string u{username_local};
+        return local->second.find(u) != local->second.cend();
     }
 
     // Try to authorize against LDAP

@@ -39,8 +39,10 @@ bool is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<s
 /** Test function for group section of is_authorized() */
 bool is_authorized_group(Userinfo &ui, char const *username_local, char const *service_name, std::vector<std::string> const &groups);
 
+/** Test function for the local usermap section of is_authorized (mapping remote usernames to authorised local usernames */
+bool is_authorized_local(Userinfo &ui, char const *username_local);
 
-/* copied prototypes for "private" (compilation unit) functions from pam_oauth2_device.cpp */
+/* copied prototypes for private (compilation unit) functions from pam_oauth2_device.cpp */
 std::string getQr(const char *text, const int ecc = 0, const int border = 1);
 
 class DeviceAuthResponse;
@@ -112,6 +114,13 @@ EXPECT_TRUE(!is_authorized_group(ui, "wilma", "plempf", groups));
 EXPECT_TRUE(is_authorized_group(ui, "fred", "plempf", groups));
 // service name is in project_id groups but not in fred's Userinfo groups
 EXPECT_TRUE(!is_authorized_group(ui, "fred", "plamf", groups));
+// local map test: remote name is in the list but local name doesn't match
+EXPECT_TRUE(!is_authorized_local(ui, "gnumpf"));
+// local map test: remote name is in the list and a local name matches
+EXPECT_TRUE(is_authorized_local(ui, "fred"));
+// local map test: remote name is not in list
+Userinfo ui2{"0123456789abcdef", "barney.test", "barney"};
+EXPECT_TRUE(!is_authorized_local(ui2, "barney"));
 }
 
 
@@ -162,6 +171,11 @@ make_dummy_config(ConfigSection section, Userinfo const &ui)
 	case ConfigSection::TEST_LDAP:
 	    break;
 	case ConfigSection::TEST_USERMAP:
+	    // create a dummy usermap to test against
+	    std::set<std::string> fred{"fred", "blips", "flopsy"};
+	    std::set<std::string> wilma{"wilma", "betty", "blaps"};
+	    cf.usermap.insert(std::pair<std::string,std::set<std::string>>{"fred.test", fred});
+	    cf.usermap.insert(std::pair<std::string,std::set<std::string>>{"wilma.test", wilma});
 	    break;
 	// no default
     }
@@ -177,9 +191,6 @@ make_dummy_userinfo(std::string const &username)
     ui.add_group("splomp");
     ui.add_group("plempf");
     ui.add_group("bleps");
-    auto const &b = ui.groups();
-    if(!std::is_sorted(b.cbegin(), b.cend()))
-        std::cerr << "groups are not sorted!\n";
     return ui;
 }
 
@@ -233,4 +244,13 @@ is_authorized_group(Userinfo &ui, char const *username_local, char const *servic
     Config cf{make_dummy_config(ConfigSection::TEST_GROUP, ui)};
     cf.group_service_name = service_name;     // gets copied (string constructor)
     return is_authorized(&cf, username_local, ui, nullptr /* only needed for cloud */);
+}
+
+
+
+bool
+is_authorized_local(Userinfo &ui, char const *username_local)
+{
+    Config cf{make_dummy_config(ConfigSection::TEST_USERMAP, ui)};
+    return is_authorized(&cf, username_local, ui, nullptr);
 }
