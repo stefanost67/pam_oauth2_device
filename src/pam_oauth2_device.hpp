@@ -2,6 +2,9 @@
 #define PAM_OAUTH2_DEVICE_HPP
 
 #include <string>
+#include <cstdio>
+
+
 
 class Userinfo
 {

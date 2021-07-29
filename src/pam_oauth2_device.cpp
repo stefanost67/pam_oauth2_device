@@ -17,59 +17,18 @@
 #include "include/ldapquery.h"
 #include "include/nayuki/QrCode.hpp"
 #include "include/nlohmann/json.hpp"
+#include "include/pam_oauth2_curl.hpp"
+#include "include/pam_oauth2_excpt.hpp"
 #include "pam_oauth2_device.hpp"
 
 using json = nlohmann::json;
 
-class BaseError : public std::exception
+size_t deleteme(char const *data, size_t size, size_t nmemb, void *userdata)
 {
-public:
-    const char *what() const throw()
-    {
-        puts("Base error");
-        return "Base Error";
-    }
-};
-
-class PamError : public BaseError
-{
-public:
-    const char *what() const throw()
-    {
-        puts("PAM error");
-        return "PAM Error";
-    }
-};
-
-class NetworkError : public BaseError
-{
-public:
-    const char *what() const throw()
-    {
-        puts("Network error");
-        return "Network Error";
-    }
-};
-
-class TimeoutError : public NetworkError
-{
-public:
-    const char *what() const throw()
-    {
-        puts("Timeout error");
-        return "Timeout Error";
-    }
-};
-
-class ResponseError : public NetworkError
-{
-public:
-    const char *what() const throw()
-    {
-        puts("Response error");
-        return "Response Error";
-    }
-};
+    if(size && nmemb)
+	reinterpret_cast<std::string *>(userdata)->append(data, size*nmemb);
+    return size*nmemb;
+}
 
 
 void Userinfo::add_group(const std::string &group)
@@ -178,11 +137,6 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
     return prompt.str();
 }
 
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    ((std::string *)userp)->append((char *)contents, size * nmemb);
-    return size * nmemb;
-}
 
 void make_authorization_request(const char *client_id,
                                 const char *client_secret,
@@ -202,7 +156,7 @@ void make_authorization_request(const char *client_id,
     curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
     curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
@@ -261,7 +215,7 @@ void poll_for_token(const char *client_id,
         curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
         curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
         res = curl_easy_perform(curl);
@@ -311,7 +265,7 @@ get_userinfo(const char *userinfo_endpoint,
     if (!curl)
         throw NetworkError();
     curl_easy_setopt(curl, CURLOPT_URL, userinfo_endpoint);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
     std::string auth_header = "Authorization: Bearer ";
@@ -381,8 +335,6 @@ bool is_authorized(Config *config,
                    // compatibility
                    char const *metadata_path = nullptr)
 {
-    std::string uname = userinfo.username();
-    const char *username_remote = uname.c_str();
     Metadata metadata;
 
     // utility username check used by cloud_access and group_access
@@ -427,7 +379,7 @@ bool is_authorized(Config *config,
         if (!curl)
             throw NetworkError();
         curl_easy_setopt(curl, CURLOPT_URL, config->cloud_endpoint.append("/").append(metadata.project_id).c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
         res = curl_easy_perform(curl);
@@ -469,7 +421,10 @@ bool is_authorized(Config *config,
     // Try to authorize against LDAP
     if (!config->ldap_host.empty())
     {
-        size_t filter_length = config->ldap_filter.length() + strlen(username_remote) + 1;
+	std::string uname = userinfo.username();
+	const char *username_remote = uname.c_str();
+
+	size_t filter_length = config->ldap_filter.length() + strlen(username_remote) + 1;
         char *filter = new char[filter_length];
         snprintf(filter, filter_length, config->ldap_filter.c_str(), username_remote);
         int rc = ldap_check_attr(config->ldap_host.c_str(), config->ldap_basedn.c_str(),

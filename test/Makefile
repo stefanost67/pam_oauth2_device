@@ -21,7 +21,8 @@ objects = $(SRC_DIR)/pam_oauth2_device.o \
 		  $(SRC_DIR)/include/metadata.o \
 		  $(SRC_DIR)/include/nayuki/BitBuffer.o \
 		  $(SRC_DIR)/include/nayuki/QrCode.o \
-		  $(SRC_DIR)/include/nayuki/QrSegment.o
+		  $(SRC_DIR)/include/nayuki/QrSegment.o \
+		  $(SRC_DIR)/include/pam_oauth2_curl.o
 
 all: $(TESTS)
 	for test in $(TESTS); do ./$${test}; done
@@ -55,3 +56,8 @@ test_pam_oauth2_device.o: test_pam_oauth2_device.cpp $(GTEST_HEADERS) $(SRC_DIR)
 
 test_pam_oauth2_device: test_pam_oauth2_device.o $(objects)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(GTEST_LIBS)  $^ $(LDLIBS) -o $@
+
+# unit tests, not part of the standard test suite
+pam_oauth2_curl.test: pam_oauth2_curl.test.cpp  ../src/include/pam_oauth2_curl.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS)  -o $@ -L $(SRC_DIR)/include $^ $(GTEST_LIBS) -lcurl
+
