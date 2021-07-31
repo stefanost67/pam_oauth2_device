@@ -129,7 +129,7 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
            << "\n-----------------\n";
     if (!complete_url)
     {
-        prompt << "With code" << user_code << user_code
+        prompt << "With code " << user_code
                << "\n-----------------\n";
     }
 
