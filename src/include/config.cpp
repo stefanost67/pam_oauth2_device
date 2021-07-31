@@ -26,6 +26,9 @@ void Config::load(const char *path)
 
     client_debug = (j.find("client_debug") != j.end()) ? j.at("client_debug").get<bool>() : false;
 
+    http_basic_auth = (j.find("http_basic_auth") != j.end()) ?
+        j.at("http_basic_auth").get<bool>() : true;
+
     if (j.find("cloud") != j.end()) {
         cloud_access = j.at("cloud").at("access").get<bool>();
         cloud_endpoint = j.at("cloud").at("endpoint").get<std::string>();

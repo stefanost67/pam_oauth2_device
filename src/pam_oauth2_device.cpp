@@ -167,9 +167,13 @@ void make_authorization_request(const Config config,
     if (!curl)
         throw NetworkError();
     std::string params = std::string("client_id=") + client_id + "&scope=" + scope;
+    if (config.http_basic_auth) {
+        curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
+    } else {
+        params += std::string("&client_secret=") + client_secret;
+    }
     curl_easy_setopt(curl, CURLOPT_URL, device_endpoint);
-    curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
-    curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
@@ -211,8 +215,11 @@ void poll_for_token(const Config config,
     std::string params;
 
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
-        << "&device_code=" << device_code;
-        //<< "&client_id=" << client_id;
+        << "&device_code=" << device_code
+        << "&client_id=" << client_id;
+    if (config.http_basic_auth)
+        oss << "&client_secret=" << client_secret;
+        //
     params = oss.str();
 
     while (true)

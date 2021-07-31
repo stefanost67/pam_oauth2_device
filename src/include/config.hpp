@@ -30,6 +30,7 @@ public:
     bool group_access,
          cloud_access,
          group_and_username_access,
+         http_basic_auth,
          client_debug;
     std::map<std::string, std::set<std::string>> usermap;
 };
