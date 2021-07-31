@@ -114,6 +114,7 @@ std::string getQr(const char *text, const int ecc = 0, const int border = 1)
                 oss << "\033[40;97m\u2588\033[0m";
             }
         }
+
         oss << std::endl;
     }
     return oss.str();
@@ -132,12 +133,16 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
                << "\n-----------------\n";
     }
 
-    prompt << "Or scan the QR code to authenticate with a mobile device"
-           << std::endl
-           << std::endl
-           << getQr((complete_url ? verification_uri_complete : verification_uri).c_str(), qr_ecc)
-           << std::endl
-           << "Hit enter when you authenticate\n";
+    if (qr_ecc >= 0) {
+        prompt << "Or scan the QR code to authenticate with a mobile device"
+               << std::endl
+               << std::endl
+               << getQr((complete_url ? verification_uri_complete : verification_uri).c_str(), qr_ecc)
+               << std::endl
+               << "Hit enter when you authenticate\n";
+    } else {
+        prompt << "Hit enter when you authenticate\n";
+    }
     return prompt.str();
 }
 
@@ -147,7 +152,8 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     return size * nmemb;
 }
 
-void make_authorization_request(const char *client_id,
+void make_authorization_request(const Config config,
+                                const char *client_id,
                                 const char *client_secret,
                                 const char *scope,
                                 const char *device_endpoint,
@@ -173,7 +179,7 @@ void make_authorization_request(const char *client_id,
         throw NetworkError();
     try
     {
-        printf(readBuffer.c_str());
+        if (config.client_debug) printf("Response to authorizaation request: %s", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -189,7 +195,8 @@ void make_authorization_request(const char *client_id,
     }
 }
 
-void poll_for_token(const char *client_id,
+void poll_for_token(const Config config,
+                    const char *client_id,
                     const char *client_secret,
                     const char *token_endpoint,
                     const char *device_code,
@@ -221,8 +228,10 @@ void poll_for_token(const char *client_id,
         if (!curl)
             throw NetworkError();
         curl_easy_setopt(curl, CURLOPT_URL, token_endpoint);
-        curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
+        if (config.http_basic_auth) {
+            curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
+            curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
+        }
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
@@ -233,7 +242,7 @@ void poll_for_token(const char *client_id,
             throw NetworkError();
         try
         {
-            printf(readBuffer.c_str());
+            if (config.client_debug) printf("Response from token poll: %s\n", readBuffer.c_str());
             data = json::parse(readBuffer);
             if (data["error"].empty())
             {
@@ -260,7 +269,8 @@ void poll_for_token(const char *client_id,
     }
 }
 
-void get_userinfo(const char *userinfo_endpoint,
+void get_userinfo(const Config &config,
+                  const char *userinfo_endpoint,
                   const char *token,
                   const char *username_attribute,
                   Userinfo *userinfo)
@@ -288,7 +298,7 @@ void get_userinfo(const char *userinfo_endpoint,
         throw NetworkError();
     try
     {
-        printf(readBuffer.c_str());
+        if (config.client_debug) printf("Userinfo token: %s\n", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         userinfo->sub = data.at("sub");
         userinfo->username = data.at(username_attribute);
@@ -376,7 +386,7 @@ bool is_authorized(Config *config,
             throw NetworkError();
         try
         {
-            printf(readBuffer.c_str());
+            if (config->client_debug) printf(readBuffer.c_str());
             auto data = json::parse(readBuffer);
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             for (auto &group : groups)
@@ -478,6 +488,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     }
     catch (json::exception &e)
     {
+        printf("Failed to load config.\n");
         return PAM_AUTH_ERR;
     }
 
@@ -486,14 +497,15 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
             throw PamError();
         make_authorization_request(
+            config,
             config.client_id.c_str(), config.client_secret.c_str(),
             config.scope.c_str(), config.device_endpoint.c_str(),
             &device_auth_response);
         show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);
-        poll_for_token(config.client_id.c_str(), config.client_secret.c_str(),
+        poll_for_token(config, config.client_id.c_str(), config.client_secret.c_str(),
                        config.token_endpoint.c_str(),
                        device_auth_response.device_code.c_str(), token);
-        get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
+        get_userinfo(config, config.userinfo_endpoint.c_str(), token.c_str(),
                      config.username_attribute.c_str(), &userinfo);
     }
     catch (PamError &e)

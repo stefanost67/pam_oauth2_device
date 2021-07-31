@@ -29,7 +29,8 @@ public:
     int qr_error_correction_level;
     bool group_access,
          cloud_access,
-         group_and_username_access;
+         group_and_username_access,
+         client_debug;
     std::map<std::string, std::set<std::string>> usermap;
 };
 
