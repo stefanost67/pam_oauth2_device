@@ -217,7 +217,7 @@ void poll_for_token(const Config config,
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
         << "&device_code=" << device_code
         << "&client_id=" << client_id;
-    if (config.http_basic_auth)
+    if (!config.http_basic_auth)
         oss << "&client_secret=" << client_secret;
         //
     params = oss.str();
