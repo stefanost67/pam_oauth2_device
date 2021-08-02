@@ -8,6 +8,7 @@
 #include <vector>
 #include <iterator>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <regex>
 
@@ -19,6 +20,28 @@
 #include "pam_oauth2_device.hpp"
 
 using json = nlohmann::json;
+
+std::string url_encode(const std::string &value) {
+    std::ostringstream escaped;
+    escaped.fill('0');
+    escaped << std::hex;
+
+    for (const auto c : value) {
+
+        // Keep alphanumeric and other accepted characters intact
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            escaped << c;
+            continue;
+        }
+
+        // Any other characters are percent-encoded
+        escaped << std::uppercase;
+        escaped << '%' << std::setw(2) << int((unsigned char) c);
+        escaped << std::nouppercase;
+    }
+
+    return escaped.str();
+}
 
 class BaseError : public std::exception
 {
@@ -215,8 +238,8 @@ void poll_for_token(const Config config,
     std::string params;
 
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
-        << "&device_code=" << device_code
-        << "&client_id=" << client_id;
+        << "&device_code=" << url_encode(device_code)
+        << "&client_id=" << url_encode(client_id);
     if (!config.http_basic_auth)
         oss << "&client_secret=" << client_secret;
         //
