@@ -56,9 +56,12 @@ The configuration should be located at `/etc/pam_oauth2_device/config.json`.
 
 **qr** - allowed correction levels are
 
+  * -1 - no QR printed
   * 0 - low
   * 1 - medium
   * 2 - high
+
+If no **qr** information is provided, one isn't printed.
 
 **group** - if enabled, on login the users IAM groups will be checked against the group specified. If they are in this group, they will be allowed in with their IAM username (plus a suffix if set above). e.g. if the group is set to "my-service", any IAM user in the group "my-service" will be allowed access. If a user is ONLY in a subgroup, e.g. "my-service/special", they will NOT be allowed access.
 
@@ -68,6 +71,8 @@ e.g. The user is trying to access the shared "centos" account, which has been sp
 The "endpoint" attribute should be set to the location of the irisiam-mapper.py CGI script.
 
 **users** - user mapping. From claim configured in *username_attribute* to the local account name. e.g. you could map the IAM username "willfurnell" or "will.furnell@stfc.ac.uk" to the local account "root". This must be done on a per-user basis, so isn't suitable for large numbers of users.
+
+**client_debug** - boolean value; if set to true, additional debugging information is printed to stdout by the module.  Useful for debugging.
 
 ## Testing the module works
 
