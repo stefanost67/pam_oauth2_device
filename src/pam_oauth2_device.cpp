@@ -1,5 +1,7 @@
 #include <curl/curl.h>
 #include <security/pam_appl.h>
+#define PAM_SM_AUTH
+#define PAM_SM_ACCOUNT
 #include <security/pam_modules.h>
 
 #include <chrono>
@@ -11,6 +13,7 @@
 #include <string>
 //#include <regex>
 #include <cstdio>
+#include <fstream>
 
 #include "include/config.hpp"
 #include "include/metadata.hpp"
@@ -458,6 +461,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     Config config;
     DeviceAuthResponse device_auth_response;
 
+    std::ofstream debug("/tmp/pad.log", std::ios_base::out);
+    // endl will flush the stream
+    if(debug)
+	debug << "started" << std::endl;
+
     try
     {
         (argc > 0) ? config.load(argv[0]) : config.load("/etc/pam_oauth2_device/config.json");
@@ -466,6 +474,9 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     {
         return PAM_AUTH_ERR;
     }
+
+    if(debug)
+	debug << "read config" << std::endl;
 
     try
     {
@@ -481,21 +492,32 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
                        device_auth_response.device_code.c_str(), token);
         Userinfo ui{get_userinfo(config.userinfo_endpoint.c_str(), token.c_str(),
 				 config.username_attribute.c_str())};
-	if (is_authorized(&config, username_local, ui))
+	if (is_authorized(&config, username_local, ui)) {
+	    if(debug)
+	    debug << "success" << std::endl;
 	    return PAM_SUCCESS;
+	}
     }
     catch (PamError &e)
     {
+	    if(debug)
+	debug << "pam error" << std::endl;
         return PAM_SYSTEM_ERR;
     }
     catch (TimeoutError &e)
     {
+	    if(debug)
+	debug << "timeout error" << std::endl;
         return PAM_AUTH_ERR;
     }
     catch (NetworkError &e)
     {
+	    if(debug)
+	debug << "timeout error" << std::endl;
         return PAM_AUTH_ERR;
     }
+	    if(debug)
+    debug << "denied error" << std::endl;
 
     return PAM_AUTH_ERR;
 }
