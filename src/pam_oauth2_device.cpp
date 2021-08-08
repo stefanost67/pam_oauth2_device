@@ -138,48 +138,41 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
                << std::endl
                << getQr((complete_url ? verification_uri_complete : verification_uri).c_str(), qr_ecc)
                << std::endl
-               << "Hit enter when you authenticate\n";
+               << "Hit enter when you have finished authenticating\n";
     } else {
-        prompt << "Hit enter when you authenticate\n";
+        prompt << "Hit enter when you have finished authenticating\n";
     }
     return prompt.str();
 }
 
 
-void make_authorization_request(const Config config,
-                                const char *client_id,
-                                const char *client_secret,
-                                const char *scope,
-                                const char *device_endpoint,
+void make_authorization_request(const Config &config,
+                                std::string const &client_id,
+                                std::string const &client_secret,
+                                std::string const &scope,
+                                std::string const &device_endpoint,
                                 DeviceAuthResponse *response)
 {
-    CURL *curl;
-    CURLcode res;
-    std::string readBuffer;
-
-    curl = curl_easy_init();
-    if (!curl)
-        throw NetworkError();
-    std::string params = std::string("client_id=") + client_id + "&scope=" + scope;
-    if (config.http_basic_auth) {
-        curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
-    } else {
-        params += std::string("&client_secret=") + client_secret;
+    pam_oauth2_curl::params params;
+    pam_oauth2_curl::add_params(params, "client_id", client_id);
+    pam_oauth2_curl::add_params((params, "scope", scope));
+    pam_oauth2_curl call(config);
+    if(!config.http_basic_auth)
+    {
+        // CHTC patch (revised). Add secret (see RFC 6749 section 2.3.1) to parameters
+        // TODO: needs a bit of revision. Selects NONE as credential below
+        pam_oauth2_curl::add_params("client_secret", client_secret);
     }
-    curl_easy_setopt(curl, CURLOPT_URL, device_endpoint);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK)
-        throw NetworkError();
+    std::string result{call.post(config,
+				 device_endpoint,
+				 config.http_basic_auth ? pam_oauth2_curl::credential(client_id, client_secret) : pam_oauth2_curl::credential(),
+				 params)};
+
     try
     {
-        puts(readBuffer.c_str());
-        if (config.client_debug) printf("Response to authorizaation request: %s", readBuffer.c_str());
-        auto data = json::parse(readBuffer);
+        puts(result.c_str());
+        if (config.client_debug) fprintf(stderr, "Response to authorization request: %s\n", result.c_str());
+        auto data = json::parse(result);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
         response->verification_uri = data.at("verification_uri");
@@ -195,24 +188,23 @@ void make_authorization_request(const Config config,
 }
 
 void poll_for_token(const Config config,
-                    const char *client_id,
-                    const char *client_secret,
-                    const char *token_endpoint,
-                    const char *device_code,
+                    std::string const &client_id,
+                    std::string const &client_secret,
+                    std::string const &token_endpoint,
+                    std::string const &device_code,
                     std::string &token)
 {
     int timeout = 300,
         interval = 3;
-    CURL *curl;
-    CURLcode res;
     json data;
+
     std::ostringstream oss;
     std::string params;
 
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
         << "&device_code=" << device_code
         << "&client_id=" << client_id;
-    if (config.http_basic_auth)
+    if (!config.http_basic_auth)
         oss << "&client_secret=" << client_secret;
         //
     params = oss.str();
@@ -226,6 +218,10 @@ void poll_for_token(const Config config,
         }
         std::string readBuffer;
         std::this_thread::sleep_for(std::chrono::seconds(interval));
+	pam_oauth2_curl call(config);
+
+	std::string result{call.get(config, token_endpoint, pam_oauth2_curl::credential(client_id, client_secret))};
+
         curl = curl_easy_init();
         if (!curl)
             throw NetworkError();
@@ -244,7 +240,7 @@ void poll_for_token(const Config config,
             throw NetworkError();
         try
         {
-            if (config.client_debug) printf("Response from token poll: %s\n", readBuffer.c_str());
+            if (config.client_debug) fprintf(stderr, "Response from token poll: %s\n", readBuffer.c_str());
             data = json::parse(readBuffer);
             if (data["error"].empty())
             {
@@ -275,9 +271,9 @@ void poll_for_token(const Config config,
 
 Userinfo
 get_userinfo(const Config &config,
-                  const char *userinfo_endpoint,
-                  const char *token,
-                  const char *username_attribute)
+                  std::string const &userinfo_endpoint,
+                  std::string const &token,
+                  std::string const &username_attribute)
 {
     CURL *curl;
     CURLcode res;
@@ -302,7 +298,7 @@ get_userinfo(const Config &config,
         throw NetworkError();
     try
     {
-        if (config.client_debug) printf("Userinfo token: %s\n", readBuffer.c_str());
+        if (config.client_debug) fprintf(stderr, "Userinfo token: %s\n", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         Userinfo ui(data.at("sub"), data.at(username_attribute), data.at("name"));
         ui.set_groups( data.at("groups").get<std::vector<std::string>>() );
@@ -312,6 +308,7 @@ get_userinfo(const Config &config,
     {
         throw ResponseError();
     }
+    throw "Cannot happen QPAIJ";
 }
 
 void show_prompt(pam_handle_t *pamh,
@@ -352,7 +349,7 @@ void show_prompt(pam_handle_t *pamh,
 }
 
 bool is_authorized(Config *config,
-                   const char *username_local,
+                   std::string const &username_local,
                    Userinfo const &userinfo,
                    // compatibility
                    char const *metadata_path = nullptr)
@@ -491,7 +488,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     }
     catch (json::exception &e)
     {
-        printf("Failed to load config.\n");
+        fputs("Failed to load config.\n", stderr);
         return PAM_AUTH_ERR;
     }
 
@@ -504,15 +501,15 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
             throw PamError();
         make_authorization_request(
             config,
-            config.client_id.c_str(), config.client_secret.c_str(),
-            config.scope.c_str(), config.device_endpoint.c_str(),
+            config.client_id, config.client_secret,
+            config.scope, config.device_endpoint,
             &device_auth_response);
         show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);
-        poll_for_token(config, config.client_id.c_str(), config.client_secret.c_str(),
-                       config.token_endpoint.c_str(),
-                       device_auth_response.device_code.c_str(), token);
-        Userinfo ui{get_userinfo(config, config.userinfo_endpoint.c_str(), token.c_str(),
-				 config.username_attribute.c_str())};
+        poll_for_token(config, config.client_id, config.client_secret,
+                       config.token_endpoint,
+                       device_auth_response.device_code, token);
+        Userinfo ui{get_userinfo(config, config.userinfo_endpoint, token,
+				 config.username_attribute)};
 	if (is_authorized(&config, username_local, ui)) {
 	    if(debug)
 	    debug << "success" << std::endl;
