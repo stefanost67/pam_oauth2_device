@@ -26,16 +26,17 @@ class Config;
 
 class pam_oauth2_curl {
 private:
-    std::unique_ptr<pam_oauth2_curl_impl> impl_;
+    // A unique pointer needs to know the size of the pointee which goes against the logic of the pimpl
+    pam_oauth2_curl_impl *impl_;
 public:
     pam_oauth2_curl(Config const &config);
-    // ~pam_oauth2_curl();
+    ~pam_oauth2_curl();
     pam_oauth2_curl(pam_oauth2_curl const &) = delete;
     pam_oauth2_curl(pam_oauth2_curl &&) = delete;
     pam_oauth2_curl &operator=(pam_oauth2_curl const &) = delete;
     pam_oauth2_curl &operator=(pam_oauth2_curl &&) = delete;
 
-    //@ parameter list; use add_params to add stuff to it (caller should treat it as an opaque type)
+    //! parameter list; use add_params to add stuff to it (caller should treat it as an opaque type)
     using params = std::vector<std::pair<std::string,std::string>>;
 
     // Need separate credentials to accommodate CHTC patches.
@@ -59,17 +60,28 @@ public:
         credential(std::string const &token) : type_(credential::type::TOKEN), un_(), pw_(), token_(token) { }
 	// The int is just there to disambiguate the overload, in lieu of something cleverer like a factory
         credential(std::string const &client_id, std::string const &client_secret, int) : type_(credential::type::SECRET), un_(client_id), pw_(client_secret), token_() { }
+        // don't copy if possible
+	credential(credential const &) = delete;
+	credential &operator=(credential const &) = delete;
+	// move only
+	credential(credential &&) = default;
+	credential &operator=(credential &&) = default;
+	~credential();
 	friend class pam_oauth2_curl_impl;
     };
 
-    //@ perform a HTTP GET or POST synchronously, returning result
+    //! @brief Credential factory kind of thing
+    credential make_credential(Config const &);
+
+    //! perform a HTTP GET or POST synchronously, returning result
+    std::string call(Config const &config, std::string const &url);
+    //! perform a HTTP POST synchronously, returning result
+    std::string call(Config const &config, std::string const &url, params const &postdata);
+    //! perform a HTTP call with custom credentials
     std::string call(Config const &config, std::string const &url, credential &&cred);
-    //@ perform a HTTP POST synchronously, returning result
-    std::string call(Config const &config, std::string const &url, credential &&cred,
-		     params const &postdata);
-    //@ add parameters to parameter list
+    //! add parameters to parameter list
     params &add_params(params &params, std::string const &key, std::string const &value);
-    //@ URL encode.
+    //! URL encode.
     std::string encode(std::string const &);
 };
 

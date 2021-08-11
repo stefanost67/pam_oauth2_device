@@ -21,13 +21,34 @@ pam_oauth2_curl::pam_oauth2_curl(Config const &config): impl_(new pam_oauth2_cur
 }
 
 
+pam_oauth2_curl::~pam_oauth2_curl()
+{
+    delete impl_;
+}
+
+
+pam_oauth2_curl::credential
+pam_oauth2_curl::make_credential(Config const &config)
+{
+    // CHTC patch (revised again). Add secret (see RFC 6749 section 2.3.1) to parameters
+    if(!config.http_basic_auth)
+    {
+	return std::move(pam_oauth2_curl::credential(config.client_id, config.client_secret, 0));
+    }
+    return std::move(credential(config.client_id, config.client_secret));
+}
+
+
+
+// TODO still too much code duplication between the calls
+
 std::string
-pam_oauth2_curl::call(Config const &config, std::string const &url, credential &&cred)
+pam_oauth2_curl::call(Config const &config, std::string const &url)
 {
     call_data readBuffer;
     impl_->reset(config);
     impl_->add_call_data(readBuffer);
-    impl_->add_credential(readBuffer, std::move(cred));
+    impl_->add_credential(readBuffer, make_credential(config));
     curl_easy_setopt(impl_->curl, CURLOPT_URL, url.c_str());
 
     CURLcode res = curl_easy_perform(impl_->curl);
@@ -40,21 +61,37 @@ pam_oauth2_curl::call(Config const &config, std::string const &url, credential &
 
 std::string
 pam_oauth2_curl::call(Config const &config, const std::string &url,
-		      pam_oauth2_curl::credential &&cred,
 		      std::vector<std::pair<std::string,std::string>> const &postdata)
 {
     call_data readBuffer;
     std::string params{pam_oauth2_curl_impl::make_post_data(postdata)};
     impl_->reset(config);
     impl_->add_call_data(readBuffer);
-    impl_->add_credential(readBuffer, std::move(cred));
+    impl_->add_credential(readBuffer, make_credential(config));
     curl_easy_setopt(impl_->curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(impl_->curl, CURLOPT_POSTFIELDS, params.c_str());
+    // Automatically POSTs because we set postfields
     CURLcode res = curl_easy_perform(impl_->curl);
     if(res != CURLE_OK)
         throw NetworkError();
     return readBuffer.callback_data;
 }
+
+
+std::string
+pam_oauth2_curl::call(Config const &config, const std::string &url, credential &&cred)
+{
+    call_data readBuffer;
+    impl_->reset(config);
+    impl_->add_call_data(readBuffer);
+    impl_->add_credential(readBuffer, std::move(cred));
+    curl_easy_setopt(impl_->curl, CURLOPT_URL, url.c_str());
+    CURLcode res = curl_easy_perform(impl_->curl);
+    if(res != CURLE_OK)
+        throw NetworkError();
+    return readBuffer.callback_data;
+}
+
 
 
 pam_oauth2_curl::params &
@@ -69,6 +106,18 @@ pam_oauth2_curl::encode(std::string const &in)
 {
     return impl_->encode(in);
 }
+
+
+pam_oauth2_curl::credential::~credential()
+{
+    if(!pw_.empty())
+        for( auto &c : pw_ )
+            c = '*';
+    if(!token_.empty())
+        for( auto &c : token_ )
+            c = '*';
+}
+
 
 
 // pam_oauth2_curl_impl implementation
@@ -202,7 +251,8 @@ pam_oauth2_curl_impl::add_params(pam_oauth2_curl::params &params, std::string co
     // Check if it is already in there using some very lispy code
     auto q = params.end();
     pam_oauth2_curl::params::iterator p = std::find_if(params.begin(), q,
-				      [&key](auto const &pair) { return key == pair.first; });
+				      // The lambda can't use auto in C++11...
+				      [&key](std::pair<std::string,std::string> const &pair) { return key == pair.first; });
     std::string key_copy(key);
     if(p == q)
     {

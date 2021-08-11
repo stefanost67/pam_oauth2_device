@@ -26,13 +26,6 @@
 
 using json = nlohmann::json;
 
-size_t deleteme(char const *data, size_t size, size_t nmemb, void *userdata)
-{
-    if(size && nmemb)
-	reinterpret_cast<std::string *>(userdata)->append(data, size*nmemb);
-    return size*nmemb;
-}
-
 
 void Userinfo::add_group(const std::string &group)
 {
@@ -153,20 +146,11 @@ void make_authorization_request(const Config &config,
                                 std::string const &device_endpoint,
                                 DeviceAuthResponse *response)
 {
+    pam_oauth2_curl curl(config);
     pam_oauth2_curl::params params;
-    pam_oauth2_curl::add_params(params, "client_id", client_id);
-    pam_oauth2_curl::add_params((params, "scope", scope));
-    pam_oauth2_curl call(config);
-    if(!config.http_basic_auth)
-    {
-        // CHTC patch (revised). Add secret (see RFC 6749 section 2.3.1) to parameters
-        // TODO: needs a bit of revision. Selects NONE as credential below
-        pam_oauth2_curl::add_params("client_secret", client_secret);
-    }
-    std::string result{call.post(config,
-				 device_endpoint,
-				 config.http_basic_auth ? pam_oauth2_curl::credential(client_id, client_secret) : pam_oauth2_curl::credential(),
-				 params)};
+    curl.add_params(params, "client_id", client_id);
+    curl.add_params(params, "scope", scope);
+    std::string result{curl.call(config, device_endpoint, params)};
 
     try
     {
@@ -198,16 +182,11 @@ void poll_for_token(const Config config,
         interval = 3;
     json data;
 
-    std::ostringstream oss;
-    std::string params;
+    pam_oauth2_curl curl(config);
 
-    oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
-        << "&device_code=" << device_code
-        << "&client_id=" << client_id;
-    if (!config.http_basic_auth)
-        oss << "&client_secret=" << client_secret;
-        //
-    params = oss.str();
+    pam_oauth2_curl::params params;
+    curl.add_params(params, "grant_type", "urn:ietf:params:oauth:grant-type:device_code");
+    curl.add_params(params, "device_code", device_code);
 
     while (true)
     {
@@ -216,32 +195,16 @@ void poll_for_token(const Config config,
         {
             throw TimeoutError();
         }
-        std::string readBuffer;
+
         std::this_thread::sleep_for(std::chrono::seconds(interval));
-	pam_oauth2_curl call(config);
+	pam_oauth2_curl curl(config);
 
-	std::string result{call.get(config, token_endpoint, pam_oauth2_curl::credential(client_id, client_secret))};
+	std::string result{curl.call(config, token_endpoint)};
 
-        curl = curl_easy_init();
-        if (!curl)
-            throw NetworkError();
-        curl_easy_setopt(curl, CURLOPT_URL, token_endpoint);
-        if (config.http_basic_auth) {
-            curl_easy_setopt(curl, CURLOPT_USERNAME, client_id);
-            curl_easy_setopt(curl, CURLOPT_PASSWORD, client_secret);
-        }
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-        if (res != CURLE_OK)
-            throw NetworkError();
-        try
+	try
         {
-            if (config.client_debug) fprintf(stderr, "Response from token poll: %s\n", readBuffer.c_str());
-            data = json::parse(readBuffer);
+            if (config.client_debug) fprintf(stderr, "Response from token poll: %s\n", result.c_str());
+            data = json::parse(result);
             if (data["error"].empty())
             {
                 token = data.at("access_token");
@@ -275,31 +238,13 @@ get_userinfo(const Config &config,
                   std::string const &token,
                   std::string const &username_attribute)
 {
-    CURL *curl;
-    CURLcode res;
-    std::string readBuffer;
+    pam_oauth2_curl curl(config);
 
-    curl = curl_easy_init();
-    if (!curl)
-        throw NetworkError();
-    curl_easy_setopt(curl, CURLOPT_URL, userinfo_endpoint);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-    std::string auth_header = "Authorization: Bearer ";
-    auth_header += token;
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, auth_header.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK)
-        throw NetworkError();
+    std::string result{curl.call(config, userinfo_endpoint, pam_oauth2_curl::credential(token))};
     try
     {
-        if (config.client_debug) fprintf(stderr, "Userinfo token: %s\n", readBuffer.c_str());
-        auto data = json::parse(readBuffer);
+        if (config.client_debug) fprintf(stderr, "Userinfo token: %s\n", result.c_str());
+        auto data = json::parse(result);
         Userinfo ui(data.at("sub"), data.at(username_attribute), data.at("name"));
         ui.set_groups( data.at("groups").get<std::vector<std::string>>() );
         return ui;
@@ -390,25 +335,18 @@ bool is_authorized(Config *config,
             throw PamError();
         }
 
-        CURL *curl;
-        CURLcode res;
-        std::string readBuffer;
+	pam_oauth2_curl curl(*config);
 
-        curl = curl_easy_init();
-        if (!curl)
-            throw NetworkError();
-        curl_easy_setopt(curl, CURLOPT_URL, config->cloud_endpoint.append("/").append(metadata.project_id).c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, deleteme);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+	std::string url{config->cloud_endpoint};
+	url.append("/");
+	url.append(metadata.project_id);
 
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-        if (res != CURLE_OK)
-            throw NetworkError();
+	// Call with empty credential
+	std::string result{curl.call(*config, url, pam_oauth2_curl::credential())};
         try
         {
-            if (config->client_debug) fputs(readBuffer.c_str(), stderr);
-            auto data = json::parse(readBuffer);
+            if (config->client_debug) fputs(result.c_str(), stderr);
+            auto data = json::parse(result);
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             std::sort(groups.begin(), groups.end());
 
@@ -448,7 +386,7 @@ bool is_authorized(Config *config,
         snprintf(filter, filter_length, config->ldap_filter.c_str(), username_remote);
         int rc = ldap_check_attr(config->ldap_host.c_str(), config->ldap_basedn.c_str(),
                                  config->ldap_user.c_str(), config->ldap_passwd.c_str(),
-                                 filter, config->ldap_attr.c_str(), username_local);
+                                 filter, config->ldap_attr.c_str(), username_local.c_str());
         delete[] filter;
         if (rc == LDAPQUERY_TRUE)
             return true;

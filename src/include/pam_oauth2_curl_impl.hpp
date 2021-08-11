@@ -16,7 +16,7 @@
 size_t WriteCallback(char const *contents, size_t size, size_t nmemb, void *userp);
 
 
-//@brief small structure for handling aux metadata (not stored in CURL handle) for each POST or GET call
+//! @brief small structure for handling aux metadata (not stored in CURL handle) for each POST or GET call
 struct call_data {
     std::string callback_data;
     std::string auz_hdr;
