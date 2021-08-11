@@ -148,7 +148,7 @@ pam_oauth2_curl_impl::reset(const Config &config)
     curl_easy_reset(curl);
     if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L) != CURLE_OK)
         throw NetworkError();
-    if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1) != CURLE_OK)
+    if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L) != CURLE_OK)
         throw NetworkError();
     if(curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/grid-security/certificates") != CURLE_OK)
         throw NetworkError();

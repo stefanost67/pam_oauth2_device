@@ -57,7 +57,7 @@ test_pam_oauth2_device.o: test_pam_oauth2_device.cpp $(GTEST_HEADERS) $(SRC_DIR)
 test_pam_oauth2_device: test_pam_oauth2_device.o $(objects)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(GTEST_LIBS)  $^ $(LDLIBS) -o $@
 
-# unit tests, not part of the standard test suite
-pam_oauth2_curl.test: pam_oauth2_curl.test.cpp  ../src/include/pam_oauth2_curl.o
+# unit tests, not part of the standard test suite (which tests pam_oauth_device.o itself)
+test_pam_oauth2_curl: test_pam_oauth2_curl.cpp  ../src/include/pam_oauth2_curl.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS)  -o $@ -L $(SRC_DIR)/include $^ $(GTEST_LIBS) -lcurl
 

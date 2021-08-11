@@ -68,7 +68,7 @@ void show_prompt(pam_handle_t *pamh,
 		 DeviceAuthResponse *device_auth_response);
 
 bool is_authorized(Config *config,
-		   const char *username_local,
+		   std::string const &username_local,
 		   Userinfo const &userinfo,
 		   char const *metadata_path = nullptr);
 
