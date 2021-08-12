@@ -171,7 +171,7 @@ void make_authorization_request(const Config &config,
     }
 }
 
-void poll_for_token(const Config config,
+void poll_for_token(Config const &config,
                     std::string const &client_id,
                     std::string const &client_secret,
                     std::string const &token_endpoint,
@@ -197,9 +197,8 @@ void poll_for_token(const Config config,
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(interval));
-	pam_oauth2_curl curl(config);
 
-	std::string result{curl.call(config, token_endpoint)};
+	std::string result{curl.call(config, token_endpoint, params)};
 
 	try
         {

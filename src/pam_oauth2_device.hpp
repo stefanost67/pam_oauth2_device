@@ -6,6 +6,9 @@
 
 
 
+/*! @brief userinfo type object (cf RFC 7662)
+ */
+
 class Userinfo
 {
 private:
@@ -16,15 +19,26 @@ private:
     std::vector<std::string> groups_;
 public:
     Userinfo(std::string const &sub, std::string const &username, std::string const &name): sub_(sub), username_(username), name_(name) {}
+
+    /*! @brief Add a group to the userinfo groups.
+     * Caution: there is no check whether the group is already in the userinfo groups.
+     */
     void add_group(std::string const &group);
+
+    /*! @brief Import a vector of group names into the userinfo groups.
+     * If there are already groups set, they will be removed (no merge).
+     */
     void set_groups(std::vector<std::string> const &groups);
 
     std::string name() const { return name_; }
     std::string sub() const { return sub_; }
     std::string username() const { return username_; }
 
-    // functions for querying the groups
+    //! Check if a given group is part of the userinfo groups
     bool is_member(std::string const &group) const;
+
+    //! @brief Check whether groups (must be _sorted_; specifed through iterators) have any overlap with the userinfo groups.
+    //! False is returned only if they are wholly distinct.
     bool intersects(std::vector<std::string>::const_iterator beg,
 		    std::vector<std::string>::const_iterator end) const;
 };
@@ -40,20 +54,23 @@ public:
     std::string get_prompt(const int qr_ecc);
 };
 
-void make_authorization_request(const char *client_id,
-                                const char *client_secret,
-                                const char *scope,
-                                const char *device_endpoint,
+void make_authorization_request(Config const &config,
+				std::string const &client_id,
+                                std::string const &client_secret,
+                                std::string const &scope,
+                                std::string const &device_endpoint,
                                 DeviceAuthResponse *response);
 
-void poll_for_token(const char *client_id,
-                    const char *client_secret,
-                    const char *token_endpoint,
-                    const char *device_code,
+void poll_for_token(Config const &config,
+		    std::string const &client_id,
+                    std::string const &client_secret,
+                    std::string const &token_endpoint,
+                    std::string const &device_code,
                     std::string &token);
 
-Userinfo get_userinfo(const char *userinfo_endpoint,
-		      const char *token,
-		      const char *username_attribute);
+Userinfo get_userinfo(Config const &config,
+		      std::string const &userinfo_endpoint,
+		      std::string const &token,
+		      std::string const &username_attribute);
 
 #endif // PAM_OAUTH2_DEVICE_HPP
