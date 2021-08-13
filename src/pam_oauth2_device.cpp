@@ -295,7 +295,6 @@ void show_prompt(pam_handle_t *pamh,
 bool is_authorized(Config *config,
                    std::string const &username_local,
                    Userinfo const &userinfo,
-                   // compatibility
                    char const *metadata_path = nullptr)
 {
     Metadata metadata;
@@ -308,11 +307,8 @@ bool is_authorized(Config *config,
     };
 
     // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
-    if (config->cloud_access)
+    if (config->cloud_access && check_username(config->cloud_username, username_local))
     {
-	if(!check_username(config->cloud_username, username_local))
-	    return false;
-
         try
         {
             // The default path for the metadata file (containing project_id) was hardcoded into previous versions
@@ -350,7 +346,12 @@ bool is_authorized(Config *config,
             std::sort(groups.begin(), groups.end());
 
 	    // If server's view of groups overlaps with the user's groups (userinfo.groups already sorted)
-	    return userinfo.intersects(groups.cbegin(), groups.cend());
+	    if(userinfo.intersects(groups.cbegin(), groups.cend()))
+	    {
+	        if(config->client_debug)
+		    fprintf(stderr, "cloud access: %s is authorised\n", username_local.c_str());
+	        return true;
+	    }
         }
         catch (json::exception &e)
         {
@@ -359,10 +360,12 @@ bool is_authorized(Config *config,
     }
 
     // Try to authorize against group name in userinfo
-    if (config->group_access)
+    if ( config->group_access \
+	 && check_username(userinfo.username(), username_local) \
+	 && userinfo.is_member(config->group_service_name) )
     {
-	return check_username(userinfo.username(), username_local)
-	       && userinfo.is_member(config->group_service_name);
+	fprintf(stderr, "group access: %s is authorised\n", username_local.c_str());
+	return true;
     }
 
     // Try to authorize against local config, looking for the remote username...
@@ -371,7 +374,11 @@ bool is_authorized(Config *config,
     if(local != config->usermap.cend())
     {
         std::string u{username_local};
-        return local->second.find(u) != local->second.cend();
+        if( local->second.find(u) != local->second.cend() )
+        {
+            fprintf(stderr, "usermap: %s is authorised\n", username_local.c_str());
+            return true;
+        }
     }
 
     // Try to authorize against LDAP
@@ -387,10 +394,13 @@ bool is_authorized(Config *config,
                                  config->ldap_user.c_str(), config->ldap_passwd.c_str(),
                                  filter, config->ldap_attr.c_str(), username_local.c_str());
         delete[] filter;
-        if (rc == LDAPQUERY_TRUE)
+        if (rc == LDAPQUERY_TRUE) {
+            fprintf(stderr, "ldap: %s is authorised\n", username_local.c_str());
             return true;
+        }
     }
 
+    fprintf(stderr, "is_authorized: %s is not authorised\n", username_local.c_str());
     return false;
 }
 
