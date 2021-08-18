@@ -1,4 +1,3 @@
-#include <curl/curl.h>
 #include <security/pam_appl.h>
 #define PAM_SM_AUTH
 #define PAM_SM_ACCOUNT
@@ -25,6 +24,10 @@
 #include "pam_oauth2_device.hpp"
 
 using json = nlohmann::json;
+
+
+//! Function to parse the PAM args (as supplied in the PAM config), updating our config
+void parse_args(Config &config, int flags, int argc, const char **argv);
 
 
 void Userinfo::add_group(const std::string &group)
@@ -167,7 +170,7 @@ void make_authorization_request(const Config &config,
     }
     catch (json::exception &e)
     {
-        throw ResponseError();
+        throw ResponseError("Couldn't parse auz response from server");
     }
 }
 
@@ -193,7 +196,7 @@ void poll_for_token(Config const &config,
         timeout -= interval;
         if (timeout < 0)
         {
-            throw TimeoutError();
+            throw TimeoutError("Timeout waiting for token");
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(interval));
@@ -219,12 +222,12 @@ void poll_for_token(Config const &config,
             }
             else
             {
-                throw ResponseError();
+                throw ResponseError("Token response: unknown server error");
             }
         }
         catch (json::exception &e)
         {
-            throw ResponseError();
+            throw ResponseError("Token response: could not parse server response");
         }
     }
 }
@@ -250,7 +253,7 @@ get_userinfo(const Config &config,
     }
     catch (json::exception &e)
     {
-        throw ResponseError();
+        throw ResponseError("Userinfo: could not parse server response");
     }
     throw "Cannot happen QPAIJ";
 }
@@ -269,7 +272,7 @@ void show_prompt(pam_handle_t *pamh,
 
     pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
     if (pam_err != PAM_SUCCESS)
-        throw PamError();
+        throw PamError("Prompt: failed to get PAM_CONV");
     prompt = device_auth_response->get_prompt(qr_error_correction_level);
     msg.msg_style = PAM_PROMPT_ECHO_OFF;
     msg.msg = prompt.c_str();
@@ -327,7 +330,7 @@ bool is_authorized(Config *config,
         catch (json::exception &e)
         {
             // An exception means it's probably safer to not allow access
-            throw PamError();
+            throw ConfigError("Is_Auz/cloud: Failed to parse project_id in config:cloud.metadata_file");
         }
 
 	pam_oauth2_curl curl(*config);
@@ -355,7 +358,7 @@ bool is_authorized(Config *config,
         }
         catch (json::exception &e)
         {
-            throw ResponseError();
+            throw ResponseError("Is_Auz/cloud: failed to parse allowed groups from server");
         }
     }
 
@@ -445,7 +448,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     try
     {
         if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
-            throw PamError();
+            throw PamError("PAM_AUTH: could not get local username");
         make_authorization_request(
             config,
             config.client_id, config.client_secret,
@@ -485,4 +488,16 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     debug << "denied error" << std::endl;
 
     return PAM_AUTH_ERR;
+}
+
+
+
+void
+parse_args(Config &config, [[maybe_unused]] int flags, int argc, const char **argv)
+{
+    // FIXME make smarter: For now we just look for "debug" as it is a common argument to PAM modules
+    // TODO Note the config file can also assert debug for now
+    for(int i = 1; i < argc; ++i)
+        if(!strcasecmp(argv[i], "debug"))
+            config.client_debug = true;
 }
