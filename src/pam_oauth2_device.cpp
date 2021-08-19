@@ -25,9 +25,11 @@
 
 using json = nlohmann::json;
 
+constexpr char const *config_path = "/etc/pam_oauth2_device/config.json";
+
 
 //! Function to parse the PAM args (as supplied in the PAM config), updating our config
-void parse_args(Config &config, int flags, int argc, const char **argv);
+bool parse_args(Config &config, int flags, int argc, const char **argv, pam_oauth2_log &logger);
 
 
 void Userinfo::add_group(const std::string &group)
@@ -170,7 +172,7 @@ void make_authorization_request(const Config &config,
     }
     catch (json::exception &e)
     {
-        throw ResponseError("Couldn't parse auz response from server");
+        throw ResponseError("AuzReq: Couldn't parse auz response from server");
     }
 }
 
@@ -426,24 +428,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     std::string token;
     Config config;
     DeviceAuthResponse device_auth_response;
+    // Current default log level is INFO
+    pam_oauth2_log logger(pamh, pam_oauth2_log::log_level_t::INFO);
 
-    std::ofstream debug("/tmp/pad.log", std::ios_base::out);
-    // endl will flush the stream
-    if(debug)
-	debug << "started" << std::endl;
-
-    try
-    {
-        (argc > 0) ? config.load(argv[0]) : config.load("/etc/pam_oauth2_device/config.json");
-    }
-    catch (json::exception &e)
-    {
-        fputs("Failed to load config.\n", stderr);
-        return PAM_AUTH_ERR;
-    }
-
-    if(debug)
-	debug << "read config" << std::endl;
+    if(!parse_args(config, flags, argc, argv, logger))
+	return PAM_AUTH_ERR;
 
     try
     {
@@ -461,43 +450,57 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         Userinfo ui{get_userinfo(config, config.userinfo_endpoint, token,
 				 config.username_attribute)};
 	if (is_authorized(&config, username_local, ui)) {
-	    if(debug)
-	    debug << "success" << std::endl;
+
 	    return PAM_SUCCESS;
 	}
     }
-    catch (PamError &e)
+    catch(BaseError const &e)
     {
-	    if(debug)
-	debug << "pam error" << std::endl;
+	logger.log(e);
+	return e.pam_error();
+    }
+    catch(std::exception const &e)
+    {
+        logger.log(pam_oauth2_log::log_level_t::ERR, "Caught system exception (this is bad)");
+        logger.log(pam_oauth2_log::log_level_t::ERR, e.what());
         return PAM_SYSTEM_ERR;
     }
-    catch (TimeoutError &e)
+    catch(char const *msg)
     {
-	    if(debug)
-	debug << "timeout error" << std::endl;
-        return PAM_AUTH_ERR;
+        logger.log(pam_oauth2_log::log_level_t::ERR, "Caught cannot-happen exception(this is very bad)");
+        logger.log(pam_oauth2_log::log_level_t::ERR, msg);
+        return PAM_SYSTEM_ERR;
     }
-    catch (NetworkError &e)
-    {
-	    if(debug)
-	debug << "timeout error" << std::endl;
-        return PAM_AUTH_ERR;
-    }
-	    if(debug)
-    debug << "denied error" << std::endl;
-
     return PAM_AUTH_ERR;
 }
 
 
 
-void
-parse_args(Config &config, [[maybe_unused]] int flags, int argc, const char **argv)
+bool
+parse_args(Config &config, [[maybe_unused]] int flags, int argc, const char **argv, pam_oauth2_log &logger)
 {
+    try
+    {
+        // TODO reallow override in argv
+        config.load(config_path);
+    }
+    catch (json::exception &e)
+    {
+	logger.log(pam_oauth2_log::log_level_t::ERR, "Failed to load config");
+	return false;
+    }
+
     // FIXME make smarter: For now we just look for "debug" as it is a common argument to PAM modules
     // TODO Note the config file can also assert debug for now
     for(int i = 1; i < argc; ++i)
         if(!strcasecmp(argv[i], "debug"))
+        {
             config.client_debug = true;
+            logger.set_log_level(pam_oauth2_log::log_level_t::DEBUG);
+        }
+
+    if(flags & PAM_SILENT)
+        logger.set_log_level(pam_oauth2_log::log_level_t::OFF);
+
+    return true;
 }

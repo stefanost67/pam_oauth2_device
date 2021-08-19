@@ -16,7 +16,7 @@
 pam_oauth2_curl::pam_oauth2_curl(Config const &config): impl_(new pam_oauth2_curl_impl(config))
 {
     if(!impl_)
-        throw NetworkError();
+        throw NetworkError("curl: Failed to create impl (out of memory?)");
     // shared options for all calls
 }
 
@@ -54,7 +54,8 @@ pam_oauth2_curl::call(Config const &config, std::string const &url)
     CURLcode res = curl_easy_perform(impl_->curl);
 
     if(res != CURLE_OK)
-	throw NetworkError();
+        // TODO make more informative
+	throw NetworkError("curl failed HTTP call");
     return readBuffer.callback_data;
 }
 
@@ -73,7 +74,7 @@ pam_oauth2_curl::call(Config const &config, const std::string &url,
     // Automatically POSTs because we set postfields
     CURLcode res = curl_easy_perform(impl_->curl);
     if(res != CURLE_OK)
-        throw NetworkError();
+        throw NetworkError("curl failed HTTP POST");
     return readBuffer.callback_data;
 }
 
@@ -88,7 +89,8 @@ pam_oauth2_curl::call(Config const &config, const std::string &url, credential &
     curl_easy_setopt(impl_->curl, CURLOPT_URL, url.c_str());
     CURLcode res = curl_easy_perform(impl_->curl);
     if(res != CURLE_OK)
-        throw NetworkError();
+        // TODO make more informative
+        throw NetworkError("curl failed HTTP GET");
     return readBuffer.callback_data;
 }
 
@@ -125,7 +127,7 @@ pam_oauth2_curl::credential::~credential()
 pam_oauth2_curl_impl::pam_oauth2_curl_impl(Config const &config): curl{curl_easy_init()}, ret(CURLE_OK)
 {
     if(!curl)
-	throw NetworkError();
+	throw NetworkError("curl: cannot initialise curl");
     reset(config);
 }
 
@@ -147,11 +149,14 @@ pam_oauth2_curl_impl::reset(const Config &config)
     // reset to shared options
     curl_easy_reset(curl);
     if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L) != CURLE_OK)
-        throw NetworkError();
+        throw NetworkError("curl setup cannot set verifypeer");
+    // Note 2 below
     if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L) != CURLE_OK)
-        throw NetworkError();
+        throw NetworkError("curl setup cannot set verifyhost");
+    // TODO make configurable
     if(curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/grid-security/certificates") != CURLE_OK)
-        throw NetworkError();
+        throw NetworkError("curl setup cannot set CA path");
+    //(void)curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, 1L);
 }
 
 
@@ -195,7 +200,7 @@ pam_oauth2_curl_impl::add_credential(call_data &data, pam_oauth2_curl::credentia
 	    add_params(data.post_data, "client_secret", encode(cred.pw_));
 	    break;
         case pam_oauth2_curl::credential::type::DENIED:
-            throw NetworkError(); // FIXME make more sensible
+            throw NetworkError("default denied is not overridden");
         default:
             throw "Cannot happen XIQJA";
     }

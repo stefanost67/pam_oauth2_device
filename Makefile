@@ -6,6 +6,7 @@ objects = src/pam_oauth2_device.o \
 		  src/include/config.o \
           src/include/metadata.o \
 		  src/include/pam_oauth2_curl.o \
+		  src/include/pam_oauth2_log.o \
 		  src/include/ldapquery.o \
 		  src/include/nayuki/BitBuffer.o \
 		  src/include/nayuki/QrCode.o \

@@ -22,7 +22,8 @@ objects = $(SRC_DIR)/pam_oauth2_device.o \
 		  $(SRC_DIR)/include/nayuki/BitBuffer.o \
 		  $(SRC_DIR)/include/nayuki/QrCode.o \
 		  $(SRC_DIR)/include/nayuki/QrSegment.o \
-		  $(SRC_DIR)/include/pam_oauth2_curl.o
+		  $(SRC_DIR)/include/pam_oauth2_curl.o \
+		  $(SRC_DIR)/include/pam_oauth2_log.o
 
 all: $(TESTS)
 	for test in $(TESTS); do ./$${test}; done
