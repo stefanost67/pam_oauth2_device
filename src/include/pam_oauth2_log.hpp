@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <exception>
+#include <stdarg.h>
 
 struct pam_handle;
 class BaseError;  // defined in pam_oauth2_excpt
@@ -23,6 +24,9 @@ public:
     // constexpr limitations in C++11?
     bool log_this(log_level_t severity) const noexcept;
 
+    //! Constructor for logger
+    //! Will accept a null pointer for the PAM handle in which case it logs to stderr (useful for testing, perhaps)
+    //! With a PAM handle it logs to syslog via PAM
     pam_oauth2_log(pam_handle *ph, log_level_t lev) noexcept;
     // no copy, but move is OK
     pam_oauth2_log(pam_oauth2_log const &) = delete;
@@ -31,15 +35,18 @@ public:
     pam_oauth2_log &operator=(pam_oauth2_log &&) = default;
     ~pam_oauth2_log();
 
+    //! Query the log level
+    constexpr log_level_t log_level() const noexcept { return lev_; }
     //! Change the log level
+    // This can't be constexpr in C++11
     void set_log_level(log_level_t logLevel) noexcept { lev_ = logLevel; }
     //! log an exception
     void log(std::exception const &) noexcept;
     //! log one of our exceptions...
     void log(BaseError const &) noexcept;
     //! log a string at a specific level
-    //! TODO: consider va_list
-    void log(log_level_t, char const *) noexcept;
+    //! C stdarg style (not a C++ pack)
+    void log(log_level_t, char const *fmt, ...) noexcept;
 
 private:
     //! Translation to syslog priority

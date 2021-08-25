@@ -34,40 +34,47 @@ Config make_dummy_config(ConfigSection, Userinfo const &);
 Userinfo make_dummy_userinfo(std::string const &username);
 
 /** Test function for cloud section of is_authorized() */
-bool is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups);
+bool is_authorized_cloud(Userinfo &ui, std::string const &username_local, std::vector<std::string> const &groups);
 
 /** Test function for group section of is_authorized() */
-bool is_authorized_group(Userinfo &ui, char const *username_local, char const *service_name, std::vector<std::string> const &groups);
+bool is_authorized_group(Userinfo &ui, std::string const &username_local, std::string const &service_name, std::vector<std::string> const &groups);
 
 /** Test function for the local usermap section of is_authorized (mapping remote usernames to authorised local usernames */
-bool is_authorized_local(Userinfo &ui, char const *username_local);
+bool is_authorized_local(Userinfo &ui, std::string const &username_local);
 
 /* copied prototypes for private (compilation unit) functions from pam_oauth2_device.cpp */
 std::string getQr(const char *text, const int ecc = 0, const int border = 1);
 
 class DeviceAuthResponse;
 
-void make_authorization_request(const char *client_id,
-				const char *client_secret,
-				const char *scope,
-				const char *device_endpoint,
+void make_authorization_request(Config const &,
+				pam_oauth2_log &,
+				std::string const &client_id,
+				std::string const &client_secret,
+				std::string const &scope,
+				std::string const &device_endpoint,
 				DeviceAuthResponse *response);
 
-void poll_for_token(const char *client_id,
-		    const char *client_secret,
-		    const char *token_endpoint,
-		    const char *device_code,
+void poll_for_token(Config const &config,
+		    pam_oauth2_log &logger,
+		    std::string const &client_id,
+		    std::string const &client_secret,
+		    std::string const &token_endpoint,
+		    std::string const &device_code,
 		    std::string &token);
 
-Userinfo get_userinfo(const char *userinfo_endpoint,
-		      const char *token,
-		      const char *username_attribute);
+Userinfo get_userinfo(Config const &config,
+		      pam_oauth2_log &logger,
+		      std::string const &userinfo_endpoint,
+		      std::string const &token,
+		      std::string const &username_attribute);
 
 void show_prompt(pam_handle_t *pamh,
 		 int qr_error_correction_level,
 		 DeviceAuthResponse *device_auth_response);
 
-bool is_authorized(Config *config,
+bool is_authorized(Config const &config,
+		   pam_oauth2_log &logger,
 		   std::string const &username_local,
 		   Userinfo const &userinfo,
 		   char const *metadata_path = nullptr);
@@ -222,9 +229,10 @@ make_groups_json(std::vector<std::string> const &groups)
 
 
 bool
-is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::string> const &groups)
+is_authorized_cloud(Userinfo &ui, std::string const &username_local, std::vector<std::string> const &groups)
 {
     Config cf{make_dummy_config(ConfigSection::TEST_CLOUD, ui)};
+    pam_oauth2_log log(nullptr, pam_oauth2_log::log_level_t::DEBUG);
     TempFile metadata("{\"project_id\":\"iristest\"}");
     cf.metadata_file = metadata.filename();
     // The project id is the name of the file
@@ -233,24 +241,26 @@ is_authorized_cloud(Userinfo &ui, char const *username_local, std::vector<std::s
     cf.cloud_endpoint = "file://" +  cloud.dirname();
     // The project id file should be passed in with the config.
     // Destructors are not called until the call has returned (so c_str()s are safe)
-    return is_authorized(&cf, username_local, ui);
+    return is_authorized(cf, log, username_local, ui);
 }
 
 
 
 bool
-is_authorized_group(Userinfo &ui, char const *username_local, char const *service_name, std::vector<std::string> const &groups)
+is_authorized_group(Userinfo &ui, std::string const &username_local, std::string const &service_name, std::vector<std::string> const &groups)
 {
     Config cf{make_dummy_config(ConfigSection::TEST_GROUP, ui)};
+    pam_oauth2_log log(nullptr, pam_oauth2_log::log_level_t::DEBUG);
     cf.group_service_name = service_name;     // gets copied (string constructor)
-    return is_authorized(&cf, username_local, ui, nullptr /* only needed for cloud */);
+    return is_authorized(cf, log, username_local, ui, nullptr /* only needed for cloud */);
 }
 
 
 
 bool
-is_authorized_local(Userinfo &ui, char const *username_local)
+is_authorized_local(Userinfo &ui, std::string const &username_local)
 {
     Config cf{make_dummy_config(ConfigSection::TEST_USERMAP, ui)};
-    return is_authorized(&cf, username_local, ui, nullptr);
+    pam_oauth2_log log(nullptr, pam_oauth2_log::log_level_t::DEBUG);
+    return is_authorized(cf, log, username_local, ui, nullptr);
 }

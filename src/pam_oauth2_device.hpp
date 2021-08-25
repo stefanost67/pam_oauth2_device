@@ -3,7 +3,7 @@
 
 #include <string>
 #include <cstdio>
-
+#include "include/pam_oauth2_log.hpp"
 
 
 /*! @brief userinfo type object (cf RFC 7662)
@@ -44,6 +44,7 @@ public:
 };
 
 
+// TODO: improve this struct
 class DeviceAuthResponse
 {
 public:
@@ -55,6 +56,7 @@ public:
 };
 
 void make_authorization_request(Config const &config,
+				pam_oauth2_log &logger,
 				std::string const &client_id,
                                 std::string const &client_secret,
                                 std::string const &scope,
@@ -62,6 +64,7 @@ void make_authorization_request(Config const &config,
                                 DeviceAuthResponse *response);
 
 void poll_for_token(Config const &config,
+		    pam_oauth2_log &logger,
 		    std::string const &client_id,
                     std::string const &client_secret,
                     std::string const &token_endpoint,
@@ -69,6 +72,7 @@ void poll_for_token(Config const &config,
                     std::string &token);
 
 Userinfo get_userinfo(Config const &config,
+		      pam_oauth2_log &logger,
 		      std::string const &userinfo_endpoint,
 		      std::string const &token,
 		      std::string const &username_attribute);

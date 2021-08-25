@@ -21,6 +21,7 @@
 #include "include/nlohmann/json.hpp"
 #include "include/pam_oauth2_curl.hpp"
 #include "include/pam_oauth2_excpt.hpp"
+#include "include/pam_oauth2_log.hpp"
 #include "pam_oauth2_device.hpp"
 
 using json = nlohmann::json;
@@ -145,6 +146,7 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
 
 
 void make_authorization_request(const Config &config,
+                                pam_oauth2_log &logger,
                                 std::string const &client_id,
                                 std::string const &client_secret,
                                 std::string const &scope,
@@ -160,7 +162,7 @@ void make_authorization_request(const Config &config,
     try
     {
         puts(result.c_str());
-        if (config.client_debug) fprintf(stderr, "Response to authorization request: %s\n", result.c_str());
+        logger.log(pam_oauth2_log::log_level_t::DEBUG, "Response to authorization request: %s\n", result.c_str());
         auto data = json::parse(result);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -177,6 +179,7 @@ void make_authorization_request(const Config &config,
 }
 
 void poll_for_token(Config const &config,
+                    pam_oauth2_log &logger,
                     std::string const &client_id,
                     std::string const &client_secret,
                     std::string const &token_endpoint,
@@ -207,7 +210,7 @@ void poll_for_token(Config const &config,
 
 	try
         {
-            if (config.client_debug) fprintf(stderr, "Response from token poll: %s\n", result.c_str());
+	    logger.log(pam_oauth2_log::log_level_t::DEBUG, "Response from token poll: %s", result.c_str());
             data = json::parse(result);
             if (data["error"].empty())
             {
@@ -238,6 +241,7 @@ void poll_for_token(Config const &config,
 
 Userinfo
 get_userinfo(const Config &config,
+                  pam_oauth2_log &logger,
                   std::string const &userinfo_endpoint,
                   std::string const &token,
                   std::string const &username_attribute)
@@ -247,7 +251,9 @@ get_userinfo(const Config &config,
     std::string result{curl.call(config, userinfo_endpoint, pam_oauth2_curl::credential(token))};
     try
     {
-        if (config.client_debug) fprintf(stderr, "Userinfo token: %s\n", result.c_str());
+	// we do an extra if since the c_str could be expensive
+	if(logger.log_level() == pam_oauth2_log::log_level_t::DEBUG)
+	    logger.log(pam_oauth2_log::log_level_t::DEBUG, "Userinfo token: %s", result.c_str());
         auto data = json::parse(result);
         Userinfo ui(data.at("sub"), data.at(username_attribute), data.at("name"));
         ui.set_groups( data.at("groups").get<std::vector<std::string>>() );
@@ -297,7 +303,8 @@ void show_prompt(pam_handle_t *pamh,
         free(response);
 }
 
-bool is_authorized(Config *config,
+bool is_authorized(Config const &config,
+                   pam_oauth2_log &logger,
                    std::string const &username_local,
                    Userinfo const &userinfo,
                    char const *metadata_path = nullptr)
@@ -307,24 +314,23 @@ bool is_authorized(Config *config,
     // utility username check used by cloud_access and group_access
     auto check_username = [&config](std::string const &remote, std::string local) -> bool
     {
-	local += config->local_username_suffix;
+	local += config.local_username_suffix;
 	return remote == local;
     };
 
     // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
-    if (config->cloud_access && check_username(config->cloud_username, username_local))
+    if (config.cloud_access && check_username(config.cloud_username, username_local))
     {
         try
         {
             // The default path for the metadata file (containing project_id) was hardcoded into previous versions
             constexpr const char *legacy_metadata_path = "/mnt/context/openstack/latest/meta_data.json";
             if(!metadata_path) {
-                if(config->metadata_file.empty()) {
-		    fputs("Warning: using hardwired legacy metadata (configure \"metadata_file\" in the \"cloud\" section in config)\n",
-			  stderr);
+                if(config.metadata_file.empty()) {
+		    logger.log(pam_oauth2_log::log_level_t::WARN, "using hardwired legacy metadata (configure \"metadata_file\" in the \"cloud\" section in config)");
 		    metadata_path = legacy_metadata_path;
 		} else {
-                    metadata_path = config->metadata_file.c_str();
+                    metadata_path = config.metadata_file.c_str();
                 }
             }
             metadata.load( metadata_path );
@@ -335,17 +341,19 @@ bool is_authorized(Config *config,
             throw ConfigError("Is_Auz/cloud: Failed to parse project_id in config:cloud.metadata_file");
         }
 
-	pam_oauth2_curl curl(*config);
+	pam_oauth2_curl curl(config);
 
-	std::string url{config->cloud_endpoint};
+	std::string url{config.cloud_endpoint};
 	url.append("/");
 	url.append(metadata.project_id);
 
 	// Call with empty credential
-	std::string result{curl.call(*config, url, pam_oauth2_curl::credential())};
+	std::string result{curl.call(config, url, pam_oauth2_curl::credential())};
         try
         {
-            if (config->client_debug) fputs(result.c_str(), stderr);
+	    // Extra if in case c_str is expensive -
+	    if(logger.log_level() == pam_oauth2_log::log_level_t::DEBUG)
+		logger.log(pam_oauth2_log::log_level_t::DEBUG, result.c_str());
             auto data = json::parse(result);
             std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
             std::sort(groups.begin(), groups.end());
@@ -353,8 +361,7 @@ bool is_authorized(Config *config,
 	    // If server's view of groups overlaps with the user's groups (userinfo.groups already sorted)
 	    if(userinfo.intersects(groups.cbegin(), groups.cend()))
 	    {
-	        if(config->client_debug)
-		    fprintf(stderr, "cloud access: %s is authorised\n", username_local.c_str());
+		logger.log(pam_oauth2_log::log_level_t::INFO, "cloud access: %s is authorised\n", username_local.c_str());
 	        return true;
 	    }
         }
@@ -365,49 +372,50 @@ bool is_authorized(Config *config,
     }
 
     // Try to authorize against group name in userinfo
-    if ( config->group_access \
+    if ( config.group_access \
 	 && check_username(userinfo.username(), username_local) \
-	 && userinfo.is_member(config->group_service_name) )
+	 && userinfo.is_member(config.group_service_name) )
     {
-	fprintf(stderr, "group access: %s is authorised\n", username_local.c_str());
+	logger.log(pam_oauth2_log::log_level_t::INFO, "group access: %s is authorised\n", username_local.c_str());
 	return true;
     }
 
     // Try to authorize against local config, looking for the remote username...
-    std::map<std::string,std::set<std::string>>::const_iterator local = config->usermap.find(userinfo.username());
+    std::map<std::string,std::set<std::string>>::const_iterator local = config.usermap.find(userinfo.username());
     // if present, check if it contains the local username(s)
-    if(local != config->usermap.cend())
+    if(local != config.usermap.cend())
     {
         std::string u{username_local};
         if( local->second.find(u) != local->second.cend() )
         {
-            fprintf(stderr, "usermap: %s is authorised\n", username_local.c_str());
+	    logger.log(pam_oauth2_log::log_level_t::INFO, "usermap: %s is authorised\n", username_local.c_str());
             return true;
         }
     }
 
     // Try to authorize against LDAP
-    if (!config->ldap_host.empty())
+    if (!config.ldap_host.empty())
     {
 	std::string uname = userinfo.username();
 	const char *username_remote = uname.c_str();
 
-	size_t filter_length = config->ldap_filter.length() + strlen(username_remote) + 1;
+	size_t filter_length = config.ldap_filter.length() + strlen(username_remote) + 1;
         char *filter = new char[filter_length];
-        snprintf(filter, filter_length, config->ldap_filter.c_str(), username_remote);
-        int rc = ldap_check_attr(config->ldap_host.c_str(), config->ldap_basedn.c_str(),
-                                 config->ldap_user.c_str(), config->ldap_passwd.c_str(),
-                                 filter, config->ldap_attr.c_str(), username_local.c_str());
+        snprintf(filter, filter_length, config.ldap_filter.c_str(), username_remote);
+        int rc = ldap_check_attr(config.ldap_host.c_str(), config.ldap_basedn.c_str(),
+                                 config.ldap_user.c_str(), config.ldap_passwd.c_str(),
+                                 filter, config.ldap_attr.c_str(), username_local.c_str());
         delete[] filter;
         if (rc == LDAPQUERY_TRUE) {
-            fprintf(stderr, "ldap: %s is authorised\n", username_local.c_str());
+	    logger.log(pam_oauth2_log::log_level_t::INFO, "ldap: %s is authorised", username_remote);
             return true;
         }
     }
 
-    fprintf(stderr, "is_authorized: %s is not authorised\n", username_local.c_str());
+    logger.log(pam_oauth2_log::log_level_t::INFO, "is_authorized: %s is not authorised\n", username_local.c_str());
     return false;
 }
+
 
 /* expected hook */
 PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv)
@@ -440,16 +448,18 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
             throw PamError("PAM_AUTH: could not get local username");
         make_authorization_request(
             config,
+            logger,
             config.client_id, config.client_secret,
             config.scope, config.device_endpoint,
             &device_auth_response);
         show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);
-        poll_for_token(config, config.client_id, config.client_secret,
+        poll_for_token(config, logger,
+		       config.client_id, config.client_secret,
                        config.token_endpoint,
                        device_auth_response.device_code, token);
-        Userinfo ui{get_userinfo(config, config.userinfo_endpoint, token,
+        Userinfo ui{get_userinfo(config, logger, config.userinfo_endpoint, token,
 				 config.username_attribute)};
-	if (is_authorized(&config, username_local, ui)) {
+	if (is_authorized(config, logger, username_local, ui)) {
 
 	    return PAM_SUCCESS;
 	}

@@ -12,7 +12,6 @@
 #include "pam_oauth2_excpt.hpp"
 
 
-// This is where make_unique could have been useful but it is not available till C++14
 pam_oauth2_curl::pam_oauth2_curl(Config const &config): impl_(new pam_oauth2_curl_impl(config))
 {
     if(!impl_)
@@ -156,7 +155,7 @@ pam_oauth2_curl_impl::reset(const Config &config)
     // TODO make configurable
     if(curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/grid-security/certificates") != CURLE_OK)
         throw NetworkError("curl setup cannot set CA path");
-    //(void)curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, 1L);
+    //(void)curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, buf);
 }
 
 

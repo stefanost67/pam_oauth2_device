@@ -19,6 +19,8 @@
 
 // pimpl (defined in pam_oauth2_curl_impl.hpp and implemented in pam_oauth2_curl.cpp)
 class pam_oauth2_curl_impl;
+// declared in pam_oauth2_log.hpp
+// class pam_oauth2_log;
 // defined in config.hpp
 class Config;
 
@@ -28,8 +30,10 @@ class pam_oauth2_curl {
 private:
     // A unique pointer needs to know the size of the pointee which goes against the logic of the pimpl
     pam_oauth2_curl_impl *impl_;
+//    pam_oauth2_log &log_;
 public:
     pam_oauth2_curl(Config const &config);
+    //    pam_oauth2_curl(Config const &config, pam_oauth2_log &logger);
     ~pam_oauth2_curl();
     pam_oauth2_curl(pam_oauth2_curl const &) = delete;
     pam_oauth2_curl(pam_oauth2_curl &&) = delete;

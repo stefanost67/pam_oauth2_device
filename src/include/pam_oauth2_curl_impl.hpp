@@ -24,7 +24,7 @@ struct call_data {
     curl_slist *headers;
     pam_oauth2_curl::credential cred;
 
-    call_data() : callback_data(), post_data(), headers(nullptr), cred() { }
+    call_data() : callback_data(), auz_hdr(), post_data(), headers(nullptr), cred() { }
     ~call_data()
     {
         if(headers) curl_slist_free_all(headers);

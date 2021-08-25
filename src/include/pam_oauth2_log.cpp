@@ -11,7 +11,7 @@
 
 pam_oauth2_log::pam_oauth2_log(pam_handle *ph, log_level_t lev) noexcept : ph_(ph), lev_(lev), log_(nullptr)
 {
-    if(lev == log_level_t::DEBUG)
+    if(lev == log_level_t::DEBUG || !ph)
         // TODO needs more thought
         log_ = stderr;
 }
@@ -46,6 +46,8 @@ pam_oauth2_log::log_this(log_level_t severity) const noexcept
         case log_level_t::ERR:
             if(severity == log_level_t::ERR)
                 return true;
+        case log_level_t::OFF:
+            return false;
     }
     return false;
 }
@@ -70,6 +72,9 @@ pam_oauth2_log::syslog_pri(log_level_t level) const noexcept
             break;
         case log_level_t::ERR:
             pri |= LOG_ERR;
+            break;
+        case log_level_t::OFF:
+            break; //can't happen
     }
     return pri;
 }
@@ -82,7 +87,8 @@ pam_oauth2_log::log(BaseError const &e) noexcept
     if(lev_ == log_level_t::OFF)
         return;
     // Simple log
-    pam_syslog(ph_, syslog_pri(e.severity_), e.what());
+    if(ph_)
+        pam_syslog(ph_, syslog_pri(e.severity_), "%s", e.what());
     if(log_)
     {
         // short message
@@ -97,13 +103,19 @@ pam_oauth2_log::log(BaseError const &e) noexcept
 
 
 void
-pam_oauth2_log::log(log_level_t level, const char *msg) noexcept
+pam_oauth2_log::log(log_level_t level, const char *fmt, ...) noexcept
 {
     if(lev_ == log_level_t::OFF)
         return;
-    pam_syslog(ph_, syslog_pri(level), "%s", msg);
+    va_list ap1, ap2;
+    va_start(ap1, fmt);
+    va_copy(ap2, ap1);		// dest, src
+    if(ph_)
+        pam_vsyslog(ph_, syslog_pri(level), fmt, ap1);
     if(log_)
-        fprintf(log_, "%s\n", msg);
+        vfprintf(log_, fmt, ap2);
+    va_end(ap1);
+    va_end(ap2);
 }
 
 
@@ -112,7 +124,8 @@ pam_oauth2_log::log(std::exception const &e) noexcept
 {
     if(lev_ == log_level_t::OFF)
         return;
-    pam_syslog(ph_, LOG_ERR, "system excpt %s", e.what());
+    if(ph_)
+        pam_syslog(ph_, LOG_ERR, "system excpt %s", e.what());
     if(log_)
         fprintf(log_, "system exception %s\n", e.what());
 }
