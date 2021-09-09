@@ -47,12 +47,17 @@ void Config::load(const char *path)
 
     if (j.find("ldap") != j.end())
     {
-        ldap_host = j.at("ldap").at("host").get<std::string>();
-        ldap_basedn = j.at("ldap").at("basedn").get<std::string>();
-        ldap_user = j.at("ldap").at("user").get<std::string>();
-        ldap_passwd = j.at("ldap").at("passwd").get<std::string>();
-        ldap_filter = j.at("ldap").at("filter").get<std::string>();
-        ldap_attr = j.at("ldap").at("attr").get<std::string>();
+	auto ldap = j.at("ldap");
+        ldap_host = ldap.at("host").get<std::string>();
+        ldap_basedn = ldap.at("basedn").get<std::string>();
+        ldap_user = ldap.at("user").get<std::string>();
+        ldap_passwd = ldap.at("passwd").get<std::string>();
+	if(ldap.find("scope") != ldap.end())
+	    ldap_scope = ldap.at("scope").get<std::string>();
+	if(ldap.find("preauth") != ldap.end())
+	    ldap_preauth = ldap.at("preauth").get<std::string>();
+        ldap_filter = ldap.at("filter").get<std::string>();
+        ldap_attr = ldap.at("attr").get<std::string>();
     }
     if (j.find("users") != j.end())
     {

@@ -36,7 +36,7 @@ public:
     ~pam_oauth2_log();
 
     //! Query the log level
-    constexpr log_level_t log_level() const noexcept { return lev_; }
+    log_level_t log_level() const noexcept { return lev_; }
     //! Change the log level
     // This can't be constexpr in C++11
     void set_log_level(log_level_t logLevel) noexcept { lev_ = logLevel; }

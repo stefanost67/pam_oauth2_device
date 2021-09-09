@@ -32,6 +32,10 @@ constexpr char const *config_path = "/etc/pam_oauth2_device/config.json";
 //! Function to parse the PAM args (as supplied in the PAM config), updating our config
 bool parse_args(Config &config, int flags, int argc, const char **argv, pam_oauth2_log &logger);
 
+//! Call LDAP to ask if we are to bypass the pam_sm_* call for a given local_user
+bool bypass(Config const &, pam_oauth2_log &, char const *);
+
+
 
 void Userinfo::add_group(const std::string &group)
 {
@@ -324,6 +328,7 @@ bool is_authorized(Config const &config,
         try
         {
             // The default path for the metadata file (containing project_id) was hardcoded into previous versions
+	    // TODO no longer needed
             constexpr const char *legacy_metadata_path = "/mnt/context/openstack/latest/meta_data.json";
             if(!metadata_path) {
                 if(config.metadata_file.empty()) {
@@ -398,11 +403,15 @@ bool is_authorized(Config const &config,
     {
 	std::string uname = userinfo.username();
 	const char *username_remote = uname.c_str();
+	int scope = ldap_scope_value(config.ldap_scope.c_str());
+	if(scope < -1) {
+	    throw ConfigError("Failed to parse LDAP scope");
+	}
 
 	size_t filter_length = config.ldap_filter.length() + strlen(username_remote) + 1;
         char *filter = new char[filter_length];
         snprintf(filter, filter_length, config.ldap_filter.c_str(), username_remote);
-        int rc = ldap_check_attr(config.ldap_host.c_str(), config.ldap_basedn.c_str(),
+        int rc = ldap_check_attr(config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
                                  config.ldap_user.c_str(), config.ldap_passwd.c_str(),
                                  filter, config.ldap_attr.c_str(), username_local.c_str());
         delete[] filter;
@@ -420,12 +429,34 @@ bool is_authorized(Config const &config,
 /* expected hook */
 PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv)
 {
+    char const *local_user;
+    if (pam_get_user(pamh, &local_user, "Username: ") != PAM_SUCCESS)
+	return PAM_CRED_INSUFFICIENT;
+    Config config;
+    pam_oauth2_log logger(pamh, pam_oauth2_log::log_level_t::INFO);
+
+    if(!parse_args(config, flags, argc, argv, logger))
+	return PAM_SYSTEM_ERR;
+    if(bypass(config, logger, local_user))
+	return PAM_IGNORE;
+
     return PAM_SUCCESS;
 }
 
 /* expected hook */
 PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags, int argc, const char **argv)
 {
+    char const *local_user;
+    if (pam_get_user(pamh, &local_user, "Username: ") != PAM_SUCCESS)
+	return PAM_CRED_INSUFFICIENT;
+    Config config;
+    pam_oauth2_log logger(pamh, pam_oauth2_log::log_level_t::INFO);
+
+    if(!parse_args(config, flags, argc, argv, logger))
+	return PAM_SYSTEM_ERR;
+    if(bypass(config, logger, local_user))
+	return PAM_IGNORE;
+
     return PAM_SUCCESS;
 }
 
@@ -446,6 +477,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     {
         if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
             throw PamError("PAM_AUTH: could not get local username");
+
+	if(bypass(config, logger, username_local))
+	    return PAM_IGNORE;
+
         make_authorization_request(
             config,
             logger,
@@ -513,4 +548,46 @@ parse_args(Config &config, [[maybe_unused]] int flags, int argc, const char **ar
         logger.set_log_level(pam_oauth2_log::log_level_t::OFF);
 
     return true;
+}
+
+
+
+bool
+bypass(Config const &config, pam_oauth2_log &logger, char const *local_user)
+{
+    if(config.ldap_host.empty() && config.ldap_preauth.empty())
+	return false;
+    int scope = ldap_scope_value(config.ldap_scope.c_str());
+    if(scope < -1)
+	throw ConfigError("Failed to interpret LDAP scope");
+
+    // Since %s gets substituted we don't actually need the +1, nitpicking fans
+    size_t len = config.ldap_preauth.size() + strlen(local_user) + 1;
+    char *query = new char[len];
+    if(!query)
+    {
+	// if we're out of memory, we're probably in trouble
+	logger.log(pam_oauth2_log::log_level_t::ERR, "bypass failed malloc");
+	throw std::bad_alloc();
+    }
+
+    // .c_str() is noexcept from C++ onwards
+    snprintf(query, len, config.ldap_preauth.c_str(), local_user);
+
+    int rc = ldap_bool_query(config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
+			     config.ldap_user.c_str(), config.ldap_passwd.c_str(), query);
+    switch(rc)
+    {
+	case LDAPQUERY_FALSE:
+	    logger.log(pam_oauth2_log::log_level_t::INFO, "Bypass false for %s", local_user);
+	    return false;
+	case LDAPQUERY_TRUE:
+	    logger.log(pam_oauth2_log::log_level_t::INFO, "Bypass true for %s", local_user);
+	    return true;
+	case LDAPQUERY_ERROR:
+	    logger.log(pam_oauth2_log::log_level_t::ERR, "bypass LDAP error");
+	    return false;
+	default:
+	    throw "cannot happen UQYDA";
+    }
 }
