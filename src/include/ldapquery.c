@@ -4,6 +4,8 @@
 #include <ldap.h>
 
 #include "ldapquery.h"
+#include <syslog.h>
+#include <security/pam_ext.h>
 
 
 
@@ -12,7 +14,7 @@ ldap_scope_value(char const *string)
 {
     // Some sort of sensible default for an empty input
     if(!string || !*string)
-	return LDAP_SCOPE_DEFAULT;
+	return LDAP_SCOPE_SUB;
     if(!strcasecmp(string, "base") || !strcasecmp(string, "baseobject"))
 	return LDAP_SCOPE_BASE;
     if(!strcasecmp(string, "one") || !strcasecmp(string, "onelevel"))
@@ -29,7 +31,8 @@ ldap_scope_value(char const *string)
 
 
 
-int ldap_check_attr(const char *host, const char *basedn, int scope,
+int ldap_check_attr(void const *pamh, enum ldap_loglevel_t log,
+		    const char *host, const char *basedn, int scope,
                     const char *user, const char *passwd,
                     const char *filter, const char *attr,
                     const char *value) {
@@ -46,16 +49,24 @@ int ldap_check_attr(const char *host, const char *basedn, int scope,
     const int ldap_version = LDAP_VERSION3;
 
     if (ldap_initialize(&ld, host) != LDAP_SUCCESS) {
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP failed init");
         return LDAPQUERY_ERROR;
     }
 
     if (ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &ldap_version) != LDAP_SUCCESS) {
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP failed to set v3");
         return LDAPQUERY_ERROR;
     }
 
     if(user && *user && passwd && *passwd) {
+	if(log == LDAP_LOGLEVEL_DEBUG)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP set user %s", user);
 	passwd_local = (char *) malloc(strlen(passwd) + 1);
 	if(!passwd_local) {
+	    if(log != LDAP_LOGLEVEL_OFF)
+		pam_syslog(pamh, LOG_AUTHPRIV, "LDAP malloc failed");
 	    return LDAPQUERY_ERROR;
 	}
 	strcpy(passwd_local, passwd);
@@ -64,19 +75,28 @@ int ldap_check_attr(const char *host, const char *basedn, int scope,
 	rc = ldap_sasl_bind_s(ld, user, LDAP_SASL_SIMPLE, &cred, NULL, NULL, &servercredp);
 	free(passwd_local);
 	if (rc != LDAP_SUCCESS) {
+	    if(log != LDAP_LOGLEVEL_OFF)
+		pam_syslog(pamh, LOG_AUTHPRIV, "LDAP bind error (search): %s", ldap_err2string(rc));
 	    return LDAPQUERY_ERROR;
 	}
     } else {
+	if(log <= LDAP_LOGLEVEL_INFO)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP search anonymous");
 	user = NULL;   // quick flag to remind ourselves not to unbind
     }
 
     attr_local = strdup(attr);
+    if(log == LDAP_LOGLEVEL_DEBUG) {
+	pam_syslog(pamh, LOG_AUTHPRIV, "Search base=%s scope=%d filter=%s attr=%s", basedn, scope, filter, attrs[0]);
+    }
     rc = ldap_search_ext_s(ld, basedn, scope, filter, attrs, 0, NULL, NULL, NULL, 0, &res);
     free(attr_local);
     if (rc != LDAP_SUCCESS) {
         ldap_msgfree(res);
 	if(user)
 	    ldap_unbind_ext_s(ld, NULL, NULL);
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP search for %s failed: %s", attr, ldap_err2string(rc));
         return LDAPQUERY_ERROR;
     }
 
@@ -115,7 +135,8 @@ int ldap_check_attr(const char *host, const char *basedn, int scope,
 
 
 int
-ldap_bool_query(const char *host, const char *basedn, int scope,
+ldap_bool_query(void const *pamh, enum ldap_loglevel_t log,
+		const char *host, const char *basedn, int scope,
 		const char *user, const char *passwd,
 		const char *query)
 {
@@ -129,16 +150,23 @@ ldap_bool_query(const char *host, const char *basedn, int scope,
     const int ldap_version = LDAP_VERSION3;
 
     if (ldap_initialize(&ld, host) != LDAP_SUCCESS) {
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "Failed to init LDAP library");
 	return LDAPQUERY_ERROR;
     }
 
     if (ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &ldap_version) != LDAP_SUCCESS) {
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "Failed to set version 3");
 	return LDAPQUERY_ERROR;
     }
 
     if(user && *user && passwd && *passwd) {
+	if(log == LDAP_LOGLEVEL_DEBUG)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "Setting LDAP user %s", user);
 	passwd_local = (char *) malloc(strlen(passwd) + 1);
 	if(!passwd_local) {
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP malloc failed");
 	    return LDAPQUERY_ERROR;
 	}
 	strcpy(passwd_local, passwd);
@@ -147,17 +175,26 @@ ldap_bool_query(const char *host, const char *basedn, int scope,
 	rc = ldap_sasl_bind_s(ld, user, LDAP_SASL_SIMPLE, &cred, NULL, NULL, &servercredp);
 	free(passwd_local);
 	if (rc != LDAP_SUCCESS) {
+	    if(log != LDAP_LOGLEVEL_OFF)
+		pam_syslog(pamh, LOG_AUTHPRIV, "LDAP bind error (query): %s", ldap_err2string(rc));
 	    return LDAPQUERY_ERROR;
 	}
     } else {
+	if(log <= LDAP_LOGLEVEL_INFO)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP query anonymous");
 	user = NULL;   // quick hack to tell rest of code not to bother to unbind
     }
 
+    if(log == LDAP_LOGLEVEL_DEBUG) {
+	pam_syslog(pamh, LOG_AUTHPRIV, "Query base=%s scope=%d query=%s", basedn, scope, query);
+    }
     rc = ldap_search_ext_s(ld, basedn, scope, query, attrs, 1, NULL, NULL, NULL, 0, &res);
     if (rc != LDAP_SUCCESS) {
 	ldap_msgfree(res);
 	if(user)
 	    ldap_unbind_ext_s(ld, NULL, NULL);
+	if(log != LDAP_LOGLEVEL_OFF)
+	    pam_syslog(pamh, LOG_AUTHPRIV, "LDAP query error: %s", ldap_err2string(rc));
 	return LDAPQUERY_ERROR;
     }
 
