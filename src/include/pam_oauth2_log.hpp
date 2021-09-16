@@ -47,6 +47,8 @@ public:
     //! log a string at a specific level
     //! C stdarg style (not a C++ pack)
     void log(log_level_t, char const *fmt, ...) noexcept;
+    //! Return the pam handle
+    pam_handle const *get_pam_handle() { return ph_; }
 
 private:
     //! Translation to syslog priority

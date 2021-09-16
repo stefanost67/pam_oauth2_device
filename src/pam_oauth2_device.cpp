@@ -35,6 +35,9 @@ bool parse_args(Config &config, int flags, int argc, const char **argv, pam_oaut
 //! Call LDAP to ask if we are to bypass the pam_sm_* call for a given local_user
 bool bypass(Config const &, pam_oauth2_log &, char const *);
 
+//! Translate from C++'s log level (as defined in pam_oauth2_log) to a C one used by LDAP
+enum ldap_loglevel_t ldap_log_level(pam_oauth2_log::log_level_t);
+
 
 
 void Userinfo::add_group(const std::string &group)
@@ -229,6 +232,13 @@ void poll_for_token(Config const &config,
             {
                 ++interval;
             }
+            else if (data["error"] == "unauthorized")
+            {
+		// DEBUG has already logged this (above), but in this case we do want to log what the server said
+		if(logger.log_level() != pam_oauth2_log::log_level_t::DEBUG)
+		    logger.log(pam_oauth2_log::log_level_t::WARN, "Response from token poll: %s", result.c_str());
+                throw ResponseError("Server denied authorisation");
+            }
             else
             {
                 throw ResponseError("Token response: unknown server error");
@@ -411,7 +421,8 @@ bool is_authorized(Config const &config,
 	size_t filter_length = config.ldap_filter.length() + strlen(username_remote) + 1;
         char *filter = new char[filter_length];
         snprintf(filter, filter_length, config.ldap_filter.c_str(), username_remote);
-        int rc = ldap_check_attr(config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
+        int rc = ldap_check_attr(logger.get_pam_handle(), ldap_log_level(logger.log_level()),
+				 config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
                                  config.ldap_user.c_str(), config.ldap_passwd.c_str(),
                                  filter, config.ldap_attr.c_str(), username_local.c_str());
         delete[] filter;
@@ -495,7 +506,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         Userinfo ui{get_userinfo(config, logger, config.userinfo_endpoint, token,
 				 config.username_attribute)};
 	if (is_authorized(config, logger, username_local, ui)) {
-
+	    logger.log(pam_oauth2_log::log_level_t::INFO, "%s is authorised", username_local);
 	    return PAM_SUCCESS;
 	}
     }
@@ -574,7 +585,9 @@ bypass(Config const &config, pam_oauth2_log &logger, char const *local_user)
     // .c_str() is noexcept from C++ onwards
     snprintf(query, len, config.ldap_preauth.c_str(), local_user);
 
-    int rc = ldap_bool_query(config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
+    logger.log(pam_oauth2_log::log_level_t::DEBUG, "LDAP preauth query \"%s\"", query);
+    int rc = ldap_bool_query(logger.get_pam_handle(), ldap_log_level(logger.log_level()),
+			     config.ldap_host.c_str(), config.ldap_basedn.c_str(), scope,
 			     config.ldap_user.c_str(), config.ldap_passwd.c_str(), query);
     switch(rc)
     {
@@ -591,3 +604,25 @@ bypass(Config const &config, pam_oauth2_log &logger, char const *local_user)
 	    throw "cannot happen UQYDA";
     }
 }
+
+
+
+enum ldap_loglevel_t
+ldap_log_level(pam_oauth2_log::log_level_t log)
+{
+    switch(log)
+    {
+    case pam_oauth2_log::log_level_t::DEBUG:
+	return LDAP_LOGLEVEL_DEBUG;
+    case pam_oauth2_log::log_level_t::INFO:
+	return LDAP_LOGLEVEL_INFO;
+    case pam_oauth2_log::log_level_t::WARN:
+	return LDAP_LOGLEVEL_WARN;
+    case pam_oauth2_log::log_level_t::ERR:
+	return LDAP_LOGLEVEL_ERR;
+    case pam_oauth2_log::log_level_t::OFF:
+	return LDAP_LOGLEVEL_OFF;
+    }
+    throw "cannot happen ATQND";
+}
+

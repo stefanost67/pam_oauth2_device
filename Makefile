@@ -1,4 +1,5 @@
 CXXFLAGS=-Wall -fPIC -std=c++11
+CFLAGS=-Wall -fPIC
 
 LDLIBS=-lpam -lcurl -lldap -llber
 
@@ -15,6 +16,9 @@ objects = src/pam_oauth2_device.o \
 all: pam_oauth2_device.so
 
 %.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 pam_oauth2_device.so: $(objects)
