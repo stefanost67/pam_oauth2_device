@@ -24,6 +24,7 @@ public:
 	ldap_preauth,
         ldap_filter,
         ldap_attr,
+	tls_ca_path,
         group_service_name,
         cloud_endpoint,
         cloud_username,

@@ -152,8 +152,8 @@ pam_oauth2_curl_impl::reset(const Config &config)
     // Note 2 below
     if(curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L) != CURLE_OK)
         throw NetworkError("curl setup cannot set verifyhost");
-    // TODO make configurable
-    if(curl_easy_setopt(curl, CURLOPT_CAPATH, "/etc/grid-security/certificates") != CURLE_OK)
+
+    if(curl_easy_setopt(curl, CURLOPT_CAPATH, config.tls_ca_path.c_str()) != CURLE_OK)
         throw NetworkError("curl setup cannot set CA path");
     //(void)curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, buf);
 }
