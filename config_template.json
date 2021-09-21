@@ -11,6 +11,9 @@
         "username_attribute": "preferred_username",
         "local_username_suffix": ""
     },
+    "tls": {
+	"ca_path": "/etc/pki/certificates"
+    },
     "ldap": {
         "host": "ldaps://ldap-server:636",
         "basedn": "basedn",
