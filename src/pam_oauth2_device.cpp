@@ -50,7 +50,7 @@ class BaseError : public std::exception
 public:
     const char *what() const throw()
     {
-        printf("Base error");
+        printf("Base error\n");
         return "Base Error";
     }
 };
@@ -60,7 +60,7 @@ class PamError : public BaseError
 public:
     const char *what() const throw()
     {
-        printf("PAM error");
+        printf("PAM error\n");
         return "PAM Error";
     }
 };
@@ -70,7 +70,7 @@ class NetworkError : public BaseError
 public:
     const char *what() const throw()
     {
-        printf("Network error");
+        printf("Network error\n");
         return "Network Error";
     }
 };
@@ -80,7 +80,7 @@ class TimeoutError : public NetworkError
 public:
     const char *what() const throw()
     {
-        printf("Timeout error");
+        printf("Timeout error\n");
         return "Timeout Error";
     }
 };
@@ -90,7 +90,7 @@ class ResponseError : public NetworkError
 public:
     const char *what() const throw()
     {
-        printf("Response error");
+        printf("Response error\n");
         return "Response Error";
     }
 };
@@ -208,7 +208,7 @@ void make_authorization_request(const Config config,
         throw NetworkError();
     try
     {
-        if (config.client_debug) printf("Response to authorizaation request: %s", readBuffer.c_str());
+        if (config.client_debug) printf("Response to authorizaation request: %s\n", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -394,7 +394,7 @@ void notify_user( const char *user,
     CURLcode ret = mail.send(smtp_url, smtp_username, smtp_password);
     
     if (ret != CURLE_OK) {
-        printf("notify_user() failed: %s", curl_easy_strerror(ret));
+        printf("notify_user() failed: %s\n", curl_easy_strerror(ret));
         throw NetworkError();    
     }   
 }                  
@@ -558,10 +558,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 	    if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
             throw PamError();
 
-        printf("pam_sm_authenticate() called. Username: %s", username_local);   
+        printf("pam_sm_authenticate() called. Username: %s\n", username_local);   
 
         if (config.enable_email && ! IsEmailAddress(username_local)){
-            printf("pam_sm_authenticate(): Invalid email");	
+            printf("pam_sm_authenticate(): Invalid email\n");	
             throw PamError();
         }    
         
