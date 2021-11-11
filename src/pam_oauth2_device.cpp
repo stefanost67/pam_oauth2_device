@@ -391,10 +391,12 @@ void notify_user( const char *user,
                   int qr_error_correction_level = -1)
 {
     Email mail = Email(user, from, from_name, "VPN Authentication Request", device_auth_response->get_prompt(qr_error_correction_level), cc);
-    int ret = mail.send(smtp_url, smtp_username, smtp_password);
-    if (ret != 0){
-        throw NetworkError();
-    }
+    CURLcode ret = mail.send(smtp_url, smtp_username, smtp_password);
+    
+    if (ret != CURLE_OK) {
+        printf("notify_user() failed: %s", curl_easy_strerror(ret));
+        throw NetworkError();    
+    }   
 }                  
 
 bool is_authorized(Config *config,
@@ -510,6 +512,16 @@ bool is_authorized(Config *config,
     return false;
 }
 
+static bool IsEmailAddress(const std::string& str)
+{
+    // Locate '@'
+    auto at = std::find(str.begin(), str.end(), '@');
+    // Locate '.' after '@'
+    auto dot = std::find(at, str.end(), '.');
+    // make sure both characters are present
+    return (at != str.end()) && (dot != str.end());
+}
+
 /* expected hook */
 PAM_EXTERN int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv)
 {
@@ -543,12 +555,16 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 
     try
     {
-	pam_set_item(pamh, PAM_USER_PROMPT, "Enter email: \n");    
-        if (pam_get_user(pamh, &username_local, "Enter email: \n") != PAM_SUCCESS)
+	    if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
             throw PamError();
-	else {
-            printf("OK Username: %s\n", username_local);		
-	}	
+
+        printf("pam_sm_authenticate() called. Username: %s", username_local);   
+
+        if (config.enable_email && ! IsEmailAddress(username_local)){
+            printf("pam_sm_authenticate(): Invalid email");	
+            throw PamError();
+        }    
+        
         make_authorization_request(
             config,
             config.client_id.c_str(), config.client_secret.c_str(),
@@ -565,6 +581,8 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
                        device_auth_response.device_code.c_str(), token);
         get_userinfo(config, config.userinfo_endpoint.c_str(), token.c_str(),
                      config.username_attribute.c_str(), &userinfo);
+        if (pam_set_item(pamh, PAM_USER, userinfo.username.c_str()) != PAM_SUCCESS)
+            throw PamError();             
     }
     catch (PamError &e)
     {

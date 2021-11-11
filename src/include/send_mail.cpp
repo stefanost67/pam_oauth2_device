@@ -93,6 +93,10 @@ CURLcode Email::send(const std::string &url,
         curl_easy_setopt(curl, CURLOPT_VERBOSE,      1L);
  
         ret = curl_easy_perform(curl);
+
+        /* Free the list of recipients */
+        curl_slist_free_all(recipients);
+        curl_easy_cleanup(curl);
     }    
 
     return ret;
