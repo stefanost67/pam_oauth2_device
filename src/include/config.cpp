@@ -24,6 +24,17 @@ void Config::load(const char *path)
     qr_error_correction_level = (j.find("qr") != j.end()) ?
         j.at("qr").at("error_correction_level").get<int>() : -1;
 
+    enable_email =  (j.find("enable_email") != j.end()) ?
+        j.at("enable_email").get<bool>() : false;   
+
+    smtp_server_url = j.at("send_mail").at("smtp_server_url").get<std::string>();
+    smtp_username = j.at("send_mail").at("smtp_username").get<std::string>();
+    smtp_password = j.at("send_mail").at("smtp_password").get<std::string>();
+    mail_from = j.at("send_mail").at("from_address").get<std::string>();
+    mail_cc = j.at("send_mail").at("cc_address").get<std::string>();
+    mail_from_username = j.at("send_mail").at("from_username").get<std::string>();
+
+
     client_debug = (j.find("client_debug") != j.end()) ? j.at("client_debug").get<bool>() : false;
 
     http_basic_auth = (j.find("http_basic_auth") != j.end()) ?

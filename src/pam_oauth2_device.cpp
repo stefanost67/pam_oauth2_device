@@ -15,9 +15,11 @@
 #include "include/config.hpp"
 #include "include/metadata.hpp"
 #include "include/ldapquery.h"
+#include "include/send_mail.hpp"
 #include "include/nayuki/QrCode.hpp"
 #include "include/nlohmann/json.hpp"
 #include "pam_oauth2_device.hpp"
+
 
 using json = nlohmann::json;
 
@@ -240,7 +242,7 @@ void poll_for_token(const Config config,
     oss << "grant_type=urn:ietf:params:oauth:grant-type:device_code"
         << "&device_code=" << url_encode(device_code)
         << "&client_id=" << url_encode(client_id);
-    if (!config.http_basic_auth)
+    if (config.http_basic_auth)
         oss << "&client_secret=" << client_secret;
         //
     params = oss.str();
@@ -358,7 +360,7 @@ void show_prompt(pam_handle_t *pamh,
         throw PamError();
     prompt = device_auth_response->get_prompt(qr_error_correction_level);
     msg.msg_style = PAM_PROMPT_ECHO_OFF;
-    msg.msg = prompt.c_str();
+    msg.msg = (char *)prompt.c_str();
     msgp = &msg;
     response = NULL;
     pam_err = (*conv->conv)(1, &msgp, &resp, conv->appdata_ptr);
@@ -377,6 +379,23 @@ void show_prompt(pam_handle_t *pamh,
     if (response)
         free(response);
 }
+
+void notify_user( const char *user,
+                  const std::string &smtp_url,
+                  const std::string &smtp_username,
+                  const std::string &smtp_password,
+                  const std::string &from,
+                  const std::string &from_name,
+                  const std::string &cc,
+                  DeviceAuthResponse *device_auth_response,
+                  int qr_error_correction_level = -1)
+{
+    Email mail = Email(user, from, from_name, "VPN Authentication Request", device_auth_response->get_prompt(qr_error_correction_level), cc);
+    int ret = mail.send(smtp_url, smtp_username, smtp_password);
+    if (ret != 0){
+        throw NetworkError();
+    }
+}                  
 
 bool is_authorized(Config *config,
                    const char *username_local,
@@ -524,14 +543,23 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 
     try
     {
-        if (pam_get_user(pamh, &username_local, "Username: ") != PAM_SUCCESS)
+	pam_set_item(pamh, PAM_USER_PROMPT, "Enter email: \n");    
+        if (pam_get_user(pamh, &username_local, "Enter email: \n") != PAM_SUCCESS)
             throw PamError();
+	else {
+            printf("OK Username: %s\n", username_local);		
+	}	
         make_authorization_request(
             config,
             config.client_id.c_str(), config.client_secret.c_str(),
             config.scope.c_str(), config.device_endpoint.c_str(),
             &device_auth_response);
-        show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);
+        if (config.enable_email){
+            notify_user(username_local, config.smtp_server_url, config.smtp_username, config.smtp_password, config.mail_from, config.mail_from_username, config.mail_cc, &device_auth_response);    
+        }
+        else {
+            show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);
+        }    
         poll_for_token(config, config.client_id.c_str(), config.client_secret.c_str(),
                        config.token_endpoint.c_str(),
                        device_auth_response.device_code.c_str(), token);
@@ -551,7 +579,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         return PAM_AUTH_ERR;
     }
 
+    /*
     if (is_authorized(&config, username_local, &userinfo))
-        return PAM_SUCCESS;
+        return PAM_SUCCESS;	
     return PAM_AUTH_ERR;
+    */
+    return PAM_SUCCESS;
 }

@@ -22,6 +22,12 @@ public:
         ldap_passwd,
         ldap_filter,
         ldap_attr,
+        smtp_server_url,
+        smtp_username,
+        smtp_password,
+        mail_from,
+        mail_from_username,
+        mail_cc,
         group_service_name,
         cloud_endpoint,
         cloud_username,
@@ -30,6 +36,7 @@ public:
     bool group_access,
          cloud_access,
          group_and_username_access,
+         enable_email,
          http_basic_auth,
          client_debug;
     std::map<std::string, std::set<std::string>> usermap;
