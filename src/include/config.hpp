@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 class Config
 {
@@ -35,11 +36,11 @@ public:
     int qr_error_correction_level;
     bool group_access,
          cloud_access,
-         group_and_username_access,
          enable_email,
          http_basic_auth,
-         client_debug;
+         debug;
     std::map<std::string, std::set<std::string>> usermap;
+    std::vector<std::string> groups;
 };
 
 #endif // PAM_OAUTH2_DEVICE_CONFIG_HPP

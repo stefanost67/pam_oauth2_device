@@ -20,6 +20,7 @@ void Config::load(const char *path)
     userinfo_endpoint = j.at("oauth").at("userinfo_endpoint").get<std::string>();
     username_attribute = j.at("oauth").at("username_attribute").get<std::string>();
     local_username_suffix = j.at("oauth").at("local_username_suffix").get<std::string>();
+    groups = j.at("oauth").at("groups").get<std::vector<std::string>>();
 
     qr_error_correction_level = (j.find("qr") != j.end()) ?
         j.at("qr").at("error_correction_level").get<int>() : -1;
@@ -27,15 +28,16 @@ void Config::load(const char *path)
     enable_email =  (j.find("enable_email") != j.end()) ?
         j.at("enable_email").get<bool>() : false;   
 
-    smtp_server_url = j.at("send_mail").at("smtp_server_url").get<std::string>();
-    smtp_username = j.at("send_mail").at("smtp_username").get<std::string>();
-    smtp_password = j.at("send_mail").at("smtp_password").get<std::string>();
-    mail_from = j.at("send_mail").at("from_address").get<std::string>();
-    mail_cc = j.at("send_mail").at("cc_address").get<std::string>();
-    mail_from_username = j.at("send_mail").at("from_username").get<std::string>();
+    if (enable_email) {
+        smtp_server_url = j.at("send_mail").at("smtp_server_url").get<std::string>();
+        smtp_username = j.at("send_mail").at("smtp_username").get<std::string>();
+        smtp_password = j.at("send_mail").at("smtp_password").get<std::string>();
+        mail_from = j.at("send_mail").at("from_address").get<std::string>();
+        mail_cc = j.at("send_mail").at("cc_address").get<std::string>();
+        mail_from_username = j.at("send_mail").at("from_username").get<std::string>();
+    }    
 
-
-    client_debug = (j.find("client_debug") != j.end()) ? j.at("client_debug").get<bool>() : false;
+    debug = (j.find("debug") != j.end()) ? j.at("debug").get<bool>() : false;
 
     http_basic_auth = (j.find("http_basic_auth") != j.end()) ?
         j.at("http_basic_auth").get<bool>() : true;
