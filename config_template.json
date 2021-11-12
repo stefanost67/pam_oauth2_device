@@ -9,7 +9,8 @@
         "token_endpoint": "https://provider.com/token",
         "userinfo_endpoint": "https://provider.com/userinfo",
         "username_attribute": "preferred_username",
-        "local_username_suffix": ""
+        "local_username_suffix": "",
+        "groups": []
     },
     "ldap": {
         "host": "ldaps://ldap-server:636",
@@ -18,6 +19,15 @@
         "passwd": "password",
         "filter": "(&(objectClass=user)(fedid=%s))",
         "attr": "uid"
+    },
+    "enable_email" : true,
+    "send_mail" : {
+        "smtp_server_url": "smtps://smtp.gmail.com:465",
+        "smtp_username": "",
+        "smtp_password": "",
+        "from_address": "vpn@example.com",
+        "from_username": "noreply@infn-cloud-vpn",
+        "cc_address": ""
     },
     "qr": {
         "error_correction_level": 0
