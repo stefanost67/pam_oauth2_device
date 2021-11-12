@@ -1,0 +1,66 @@
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  deb-control-file-build:
+    name: Generate Debian Package
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Make
+        run: make
+
+      - name: Generate Control File
+        id: control-gen
+        uses: Nightwind-Developments/debian-control-file-builder@latest
+        with:
+          config-file: 'packaging/deb/control.json'
+          #deps-file: 'examples/control_file_generate/dependencies.txt'
+          #output-path: 'examples/input_example/'
+
+      - name: Prints Output File Path
+        run: echo "${{ steps.control-gen.outputs.control_file_path }}"
+
+      - name: Confirms Control File is Present
+        run: ls ${{ steps.control-gen.outputs.control_file_path }}
+
+      #- name: Copies control File to Intended Location (useful if Debian Control file is not in the default location)
+      #  run: cp ${{ steps.control-gen.outputs.control_file_path }} examples/input_example
+
+      - name: Prints Contents of Input Resources
+        run: ls -l "${{ github.workspace }}/output/"
+
+      - name: Build Docker Container & Run Debian Packer
+        uses: Nightwind-Developments/debian-packer@latest
+        id: container
+        with:
+          input_dir: '${{ github.workspace }}/output/'
+          output_dir: '${{ github.workspace }}/output/'
+          layout_map_file: 'packaging/deb/layout_map.json'
+          package_name: 'pam_oauth2_device'
+          package_version: '0.0.1'
+          package_arch: 'x86_64'
+
+      - name: Prints Contents of Input Resources
+        run: ls -l "${{ github.workspace }}/output/"
+
+      - name: Upload Generated Package File
+        uses: actions/upload-artifact@v2
+        with:
+          name: generated-hello-world-package
+          path: "${{ steps.container.outputs.generated_package_path }}"
+          if-no-files-found: error
+
