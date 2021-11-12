@@ -418,9 +418,9 @@ bool is_authorized(Config *config,
     if (config->debug) {
         std::ostringstream oss;
         for (auto &group: groups_intsec)
-            oss << group << " ";    
+            oss << group << ", ";    
 
-        printf("User authorized due to %s membership\n", oss.str().c_str());            
+        printf("User authorized due to group(s) membership: %s\n", oss.str().c_str());            
     }              
 
     return groups_intsec.size() != 0;   
@@ -463,7 +463,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     }
     catch (json::exception &e)
     {
-        printf("Failed to load config.\n");
+        printf("Failed to load config: %s.\n", e.what());
         return PAM_AUTH_ERR;
     }
 
