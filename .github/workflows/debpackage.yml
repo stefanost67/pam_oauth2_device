@@ -22,7 +22,7 @@ jobs:
 
       - name: Make
         run: |
-          sudo apt install -y libpam0g-dev libcurl4-openssl-dev
+          sudo apt install -y libpam0g-dev libcurl4-openssl-dev libldap2-dev
           make
 
       - name: Generate Control File
