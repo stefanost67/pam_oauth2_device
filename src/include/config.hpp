@@ -26,6 +26,7 @@ public:
         smtp_server_url,
         smtp_username,
         smtp_password,
+        smtp_ca_path,
         mail_from,
         mail_from_username,
         mail_cc,
@@ -37,6 +38,7 @@ public:
     bool group_access,
          cloud_access,
          enable_email,
+         smtp_insecure,
          http_basic_auth,
          debug;
     std::map<std::string, std::set<std::string>> usermap;

@@ -17,6 +17,8 @@ public:
     
     
     CURLcode send(const std::string &url, 
+                  const bool &insecure = false,
+                  const std::string &ca_path = "",
                   const std::string &username = "", 
                   const std::string &password = "");
 private:

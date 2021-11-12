@@ -383,17 +383,12 @@ void show_prompt(pam_handle_t *pamh,
 }
 
 void notify_user( const char *user,
-                  const std::string &smtp_url,
-                  const std::string &smtp_username,
-                  const std::string &smtp_password,
-                  const std::string &from,
-                  const std::string &from_name,
-                  const std::string &cc,
+                  const Config &config,
                   DeviceAuthResponse *device_auth_response,
                   int qr_error_correction_level = -1)
 {
-    Email mail = Email(user, from, from_name, "VPN Authentication Request", device_auth_response->get_prompt(false, qr_error_correction_level), cc);
-    CURLcode ret = mail.send(smtp_url, smtp_username, smtp_password);
+    Email mail = Email(user, config.mail_from, config.mail_from_username, "VPN Authentication Request", device_auth_response->get_prompt(false, qr_error_correction_level), config.mail_cc);
+    CURLcode ret = mail.send(config.smtp_server_url, config.smtp_insecure, config.smtp_ca_path, config.smtp_username, config.smtp_password);
     
     if (ret != CURLE_OK) {
         printf("notify_user() failed: %s\n", curl_easy_strerror(ret));
@@ -485,7 +480,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
             config.scope.c_str(), config.device_endpoint.c_str(),
             &device_auth_response);
         if (config.enable_email){
-            notify_user(username_local, config.smtp_server_url, config.smtp_username, config.smtp_password, config.mail_from, config.mail_from_username, config.mail_cc, &device_auth_response);    
+            notify_user(username_local, config, &device_auth_response);    
         }
         else {
             show_prompt(pamh, config.qr_error_correction_level, &device_auth_response);

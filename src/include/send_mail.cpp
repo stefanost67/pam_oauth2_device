@@ -61,6 +61,8 @@ size_t Email::payloadSource(void *ptr, size_t size, size_t nmemb, void *userp){
 };
 
 CURLcode Email::send(const std::string &url, 
+                  const bool &insecure,
+                  const std::string &ca_path,
                   const std::string &username, 
                   const std::string &password)
 {
@@ -76,7 +78,8 @@ CURLcode Email::send(const std::string &url,
         curl_easy_setopt(curl, CURLOPT_URL,          url     .c_str());
  
         curl_easy_setopt(curl, CURLOPT_USE_SSL,      (long)CURLUSESSL_ALL);
-        //curl_easy_setopt(curl, CURLOPT_CAINFO, "/path/to/certificate.pem");
+        if(insecure) curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+        if (!ca_path.empty()) curl_easy_setopt(curl, CURLOPT_CAINFO, ca_path.c_str());
  
         curl_easy_setopt(curl, CURLOPT_MAIL_FROM,    ("<" + from_ + ">").c_str());
         

@@ -30,6 +30,8 @@ void Config::load(const char *path)
 
     if (enable_email) {
         smtp_server_url = j.at("send_mail").at("smtp_server_url").get<std::string>();
+        smtp_insecure = j.at("send_mail").at("smtp_insecure").get<bool>();
+        smtp_ca_path = j.at("send_mail").at("smtp_ca_path").get<std::string>();
         smtp_username = j.at("send_mail").at("smtp_username").get<std::string>();
         smtp_password = j.at("send_mail").at("smtp_password").get<std::string>();
         mail_from = j.at("send_mail").at("from_address").get<std::string>();
