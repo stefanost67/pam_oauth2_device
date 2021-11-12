@@ -19,7 +19,7 @@ public:
         verification_uri,
         verification_uri_complete,
         device_code;
-    std::string get_prompt(const int qr_ecc);
+    std::string get_prompt(const bool print_hit_enter, const int qr_ecc);
 };
 
 void make_authorization_request(const char *client_id,

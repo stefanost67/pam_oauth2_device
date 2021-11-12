@@ -145,11 +145,11 @@ std::string getQr(const char *text, const int ecc = 0, const int border = 1)
     return oss.str();
 }
 
-std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
+std::string DeviceAuthResponse::get_prompt(const bool print_hit_enter = false, const int qr_ecc = 0)
 {
     bool complete_url = !verification_uri_complete.empty();
     std::ostringstream prompt;
-    prompt << "Authenticate at\n-----------------\n"
+    prompt << "Please authenticate at\n-----------------\n"
            << (complete_url ? verification_uri_complete : verification_uri)
            << "\n-----------------\n";
     if (!complete_url)
@@ -163,9 +163,11 @@ std::string DeviceAuthResponse::get_prompt(const int qr_ecc = 0)
                << std::endl
                << std::endl
                << getQr((complete_url ? verification_uri_complete : verification_uri).c_str(), qr_ecc)
-               << std::endl
-               << "Hit enter when you authenticate\n";
-    } else {
+               << std::endl;
+    } 
+    
+    if (print_hit_enter)
+    {
         prompt << "Hit enter when you authenticate\n";
     }
     return prompt.str();
@@ -208,7 +210,7 @@ void make_authorization_request(const Config config,
         throw NetworkError();
     try
     {
-        if (config.client_debug) printf("Response to authorizaation request: %s\n", readBuffer.c_str());
+        if (config.debug) printf("Response to authorizaation request: %s\n", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         response->user_code = data.at("user_code");
         response->device_code = data.at("device_code");
@@ -274,7 +276,7 @@ void poll_for_token(const Config config,
             throw NetworkError();
         try
         {
-            if (config.client_debug) printf("Response from token poll: %s\n", readBuffer.c_str());
+            if (config.debug) printf("Response from token poll: %s\n", readBuffer.c_str());
             data = json::parse(readBuffer);
             if (data["error"].empty())
             {
@@ -330,7 +332,7 @@ void get_userinfo(const Config &config,
         throw NetworkError();
     try
     {
-        if (config.client_debug) printf("Userinfo token: %s\n", readBuffer.c_str());
+        if (config.debug) printf("Userinfo token: %s\n", readBuffer.c_str());
         auto data = json::parse(readBuffer);
         userinfo->sub = data.at("sub");
         userinfo->username = data.at(username_attribute);
@@ -358,7 +360,7 @@ void show_prompt(pam_handle_t *pamh,
     pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
     if (pam_err != PAM_SUCCESS)
         throw PamError();
-    prompt = device_auth_response->get_prompt(qr_error_correction_level);
+    prompt = device_auth_response->get_prompt(true, qr_error_correction_level);
     msg.msg_style = PAM_PROMPT_ECHO_OFF;
     msg.msg = (char *)prompt.c_str();
     msgp = &msg;
@@ -390,7 +392,7 @@ void notify_user( const char *user,
                   DeviceAuthResponse *device_auth_response,
                   int qr_error_correction_level = -1)
 {
-    Email mail = Email(user, from, from_name, "VPN Authentication Request", device_auth_response->get_prompt(qr_error_correction_level), cc);
+    Email mail = Email(user, from, from_name, "VPN Authentication Request", device_auth_response->get_prompt(false, qr_error_correction_level), cc);
     CURLcode ret = mail.send(smtp_url, smtp_username, smtp_password);
     
     if (ret != CURLE_OK) {
@@ -400,119 +402,31 @@ void notify_user( const char *user,
 }                  
 
 bool is_authorized(Config *config,
-                   const char *username_local,
                    Userinfo *userinfo)
 {
-    const char *username_remote = userinfo->username.c_str();
-    Metadata metadata;
-
-    // Try and see if any IAM groups the user is a part of are also linked to the OpenStack project this VM is a part of
-    if (config->cloud_access)
-    {
-
-        try
-        {
-            metadata.load("/mnt/context/openstack/latest/meta_data.json");
-        }
-        catch (json::exception &e)
-        {
-            // An exception means it's probably safer to not allow access
-            throw PamError();
-        }
-
-        CURL *curl;
-        CURLcode res;
-        std::string readBuffer;
-
-        curl = curl_easy_init();
-        if (!curl)
-            throw NetworkError();
-        curl_easy_setopt(curl, CURLOPT_URL, config->cloud_endpoint.append("/").append(metadata.project_id).c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-        if (res != CURLE_OK)
-            throw NetworkError();
-        try
-        {
-            if (config->client_debug) printf(readBuffer.c_str());
-            auto data = json::parse(readBuffer);
-            std::vector<std::string> groups = data.at("groups").get<std::vector<std::string>>();
-            for (auto &group : groups)
-            {
-                for (auto &user_group : userinfo->groups)
-                {
-                    if (group.compare(user_group) == 0 && config->cloud_username.compare(std::string(username_local) + config->local_username_suffix) == 0)
-                    {
-                        // One of the users IRIS IAM groups matches one of the project groups, and they are trying to login with a valid username
-                        return true;
-                    }
-                }
-            }
-        }
-        catch (json::exception &e)
-        {
-            throw ResponseError();
-        }
+    if (config->groups.size() == 0) {
+        return true;
     }
+    std::vector<std::string> groups_intsec;
+    std::sort(userinfo->groups.begin(), userinfo->groups.end());
+    std::sort(config->groups.begin(), config->groups.end());
 
-    // Try to authorize againt group name in userinfo
-    if (config->group_access)
-    {
-        for (auto &group : userinfo->groups)
-        {
-            // is service name in group name? THEN do the split, otherwise ignore
-            //if (group.find(config->group_service_name) != std::string::npos)
-            if (group.compare(config->group_service_name) == 0)
-            {
-                /*std::regex reg("/");
+    std::set_intersection(userinfo->groups.begin(), userinfo->groups.end(),
+                          config->groups.begin(), config->groups.end(),
+                          std::back_inserter(groups_intsec));
 
-                std::sregex_token_iterator iter(group.begin(), group.end(), reg, -1);
-                std::sregex_token_iterator end;
+    if (config->debug) {
+        std::ostringstream oss;
+        for (auto &group: groups_intsec)
+            oss << group << " ";    
 
-                std::vector<std::string> vec(iter, end);
+        printf("User authorized due to %s membership\n", oss.str().c_str());            
+    }              
 
-                // Check if our service name matches the group service name AND the local username matches the group service username
-                if (vec[0].compare(config->group_service_name) == 0 && strcmp(vec[1].c_str(), username_local) == 0)
-                {
-                    return true;
-                }*/
-                if (std::string(username_local).compare(std::string(username_remote) + config->local_username_suffix) == 0) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    // Try to authorize against local config
-    if (config->usermap.count(username_remote) > 0)
-    {
-        if (config->usermap[username_remote].count(username_local) > 0)
-        {
-            return true;
-        }
-    }
-
-    // Try to authorize against LDAP
-    if (!config->ldap_host.empty())
-    {
-        size_t filter_length = config->ldap_filter.length() + strlen(username_remote) + 1;
-        char *filter = new char[filter_length];
-        snprintf(filter, filter_length, config->ldap_filter.c_str(), username_remote);
-        int rc = ldap_check_attr(config->ldap_host.c_str(), config->ldap_basedn.c_str(),
-                                 config->ldap_user.c_str(), config->ldap_passwd.c_str(),
-                                 filter, config->ldap_attr.c_str(), username_local);
-        delete[] filter;
-        if (rc == LDAPQUERY_TRUE)
-            return true;
-    }
-
-    return false;
+    return groups_intsec.size() != 0;   
 }
 
-static bool IsEmailAddress(const std::string& str)
+static bool isEmailAddress(const std::string& str)
 {
     // Locate '@'
     auto at = std::find(str.begin(), str.end(), '@');
@@ -560,7 +474,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 
         printf("pam_sm_authenticate() called. Username: %s\n", username_local);   
 
-        if (config.enable_email && ! IsEmailAddress(username_local)){
+        if (config.enable_email && ! isEmailAddress(username_local)){
             printf("pam_sm_authenticate(): Invalid email\n");	
             throw PamError();
         }    
@@ -581,6 +495,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
                        device_auth_response.device_code.c_str(), token);
         get_userinfo(config, config.userinfo_endpoint.c_str(), token.c_str(),
                      config.username_attribute.c_str(), &userinfo);
+        // Set PAM_USER to username for next modules in the PAM stack             
         if (pam_set_item(pamh, PAM_USER, userinfo.username.c_str()) != PAM_SUCCESS)
             throw PamError();             
     }
@@ -597,10 +512,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         return PAM_AUTH_ERR;
     }
 
-    /*
-    if (is_authorized(&config, username_local, &userinfo))
+    
+    if (is_authorized(&config, &userinfo))
         return PAM_SUCCESS;	
     return PAM_AUTH_ERR;
-    */
+    
     return PAM_SUCCESS;
 }
