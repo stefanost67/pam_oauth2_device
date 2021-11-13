@@ -20,7 +20,7 @@ jobs:
 
       - name: Compile
         run: |
-          sudo apt update && apt install -y libpam0g-dev libcurl4-openssl-dev libldap2-dev
+          sudo apt update && sudo apt install -y libpam0g-dev libcurl4-openssl-dev libldap2-dev
           make
       
       - name: Update control file with current version
