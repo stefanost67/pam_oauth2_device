@@ -1,7 +1,7 @@
 {
-  "Package": "pam_oauth2_device",
-  "Version": "0.0.1",
-  "Architecture": "x86_64",
+  "Package": "pam-oauth2-device",
+  "Version": "0.0.0",
+  "Architecture": "all",
   "Maintainer": "M. Antonacci",
   "Description": "PAM module for OAuth 2.0 Device Flow"
 }

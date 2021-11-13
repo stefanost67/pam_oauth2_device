@@ -1,15 +1,10 @@
-name: CI
+name: Create release
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    tags:
+      - '*'
+  workflow_dispatch:          
 
 jobs:
   deb-control-file-build:
@@ -17,21 +12,30 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
+      - uses: olegtarasov/get-tag@v2.1
+        id: tagName
+
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Make
+      - name: Compile
         run: |
-          sudo apt install -y libpam0g-dev libcurl4-openssl-dev libldap2-dev
+          sudo apt update && apt install -y libpam0g-dev libcurl4-openssl-dev libldap2-dev
           make
+      
+      - name: Update control file with current version
+        run: |
+          export VERSION=`echo ${{ steps.tagName.outputs.tag }} | sed 's/^v//'`      
+          sed -i "s/0.0.0/${VERSION}/" packaging/deb/control.json
+          cat packaging/deb/control.json    
 
       - name: Generate Control File
         id: control-gen
         uses: Nightwind-Developments/debian-control-file-builder@latest
         with:
           config-file: 'packaging/deb/control.json'
-          #deps-file: 'examples/control_file_generate/dependencies.txt'
-          #output-path: 'examples/input_example/'
+          deps-file: 'packaging/deb/dependencies.txt'
+          output-path: '${{ github.workspace }}/output/'
 
       - name: Prints Output File Path
         run: echo "${{ steps.control-gen.outputs.control_file_path }}"
@@ -39,8 +43,10 @@ jobs:
       - name: Confirms Control File is Present
         run: ls ${{ steps.control-gen.outputs.control_file_path }}
 
-      #- name: Copies control File to Intended Location (useful if Debian Control file is not in the default location)
-      #  run: cp ${{ steps.control-gen.outputs.control_file_path }} examples/input_example
+      - name: Prepare files
+        run: |
+          cp ${{ github.workspace }}/pam_oauth2_device.so ${{ github.workspace }}/output/
+          cp ${{ github.workspace }}/config_template.json ${{ github.workspace }}/output/config.json
 
       - name: Prints Contents of Input Resources
         run: ls -l "${{ github.workspace }}/output/"
@@ -52,17 +58,19 @@ jobs:
           input_dir: '${{ github.workspace }}/output/'
           output_dir: '${{ github.workspace }}/output/'
           layout_map_file: 'packaging/deb/layout_map.json'
-          package_name: 'pam_oauth2_device'
-          package_version: '0.0.1'
-          package_arch: 'x86_64'
+          package_name: 'pam-oauth2-device'
+          package_version: '${{ steps.tagName.outputs.tag }}'
+          package_arch: 'all'
 
       - name: Prints Contents of Input Resources
         run: ls -l "${{ github.workspace }}/output/"
 
-      - name: Upload Generated Package File
-        uses: actions/upload-artifact@v2
+      - name: Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: generated-hello-world-package
-          path: "${{ steps.container.outputs.generated_package_path }}"
-          if-no-files-found: error
+          body_path: CHANGELOG.md
+          draft: true
+          files: |
+            *.deb
+
 

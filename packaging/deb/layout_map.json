@@ -4,7 +4,11 @@
     "path": "/DEBIAN/"
   },
   {
-    "name": "postinst",
-    "path": "/DEBIAN/"
+    "name": "pam_oauth2_device.so",
+    "path": "/usr/lib/x86_64-linux-gnu/security/"    
+  },
+  {
+    "name": "config.json",
+    "path": "/etc/pam_oauth2_device/"
   }
 ]
