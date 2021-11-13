@@ -28,7 +28,6 @@ jobs:
           export VERSION=`echo ${{ steps.tagName.outputs.tag }} | sed 's/^v//'`      
           sed -i "s/0.0.0/${VERSION}/" packaging/deb/control.json
           cat packaging/deb/control.json    
-          mkdir -p ${{ github.workspace }}/output/
           ls -latr
 
       - name: Generate Control File
@@ -37,7 +36,7 @@ jobs:
         with:
           config-file: 'packaging/deb/control.json'
           deps-file: 'packaging/deb/dependencies.txt'
-          output-path: '${{ github.workspace }}/output'
+          output-path: 'packaging/output'
 
       - name: Prints Output File Path
         run: echo "${{ steps.control-gen.outputs.control_file_path }}"
