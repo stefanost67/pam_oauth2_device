@@ -46,25 +46,25 @@ jobs:
 
       - name: Prepare files
         run: |
-          cp ${{ github.workspace }}/pam_oauth2_device.so ${{ github.workspace }}/output/
-          cp ${{ github.workspace }}/config_template.json ${{ github.workspace }}/output/config.json
+          cp ${{ github.workspace }}/pam_oauth2_device.so packaging/output/
+          cp ${{ github.workspace }}/config_template.json packaging/output/config.json
 
       - name: Prints Contents of Input Resources
-        run: ls -l "${{ github.workspace }}/output/"
+        run: ls -l "packaging/output/"
 
       - name: Build Docker Container & Run Debian Packer
         uses: Nightwind-Developments/debian-packer@latest
         id: container
         with:
-          input_dir: '${{ github.workspace }}/output/'
-          output_dir: '${{ github.workspace }}/output/'
+          input_dir: 'packaging/output/'
+          output_dir: 'packaging/output/'
           layout_map_file: 'packaging/deb/layout_map.json'
           package_name: 'pam-oauth2-device'
           package_version: '${{ steps.tagName.outputs.tag }}'
           package_arch: 'all'
 
       - name: Prints Contents of Input Resources
-        run: ls -l "${{ github.workspace }}/output/"
+        run: ls -l "packaging/output/"
 
       - name: Release
         uses: softprops/action-gh-release@v1
