@@ -47,8 +47,8 @@ jobs:
       - name: Prepare files
         run: |
           ls -la packaging/output      
-          cp ${{ github.workspace }}/pam_oauth2_device.so packaging/output/
-          cp ${{ github.workspace }}/config_template.json packaging/output/config.json
+          sudo cp ${{ github.workspace }}/pam_oauth2_device.so packaging/output/
+          sudo cp ${{ github.workspace }}/config_template.json packaging/output/config.json
 
       - name: Prints Contents of Input Resources
         run: ls -l "packaging/output/"
