@@ -73,6 +73,6 @@ jobs:
           #body_path: CHANGELOG.md
           draft: true
           files: |
-            *.deb
+            packaging/output/*.deb
 
 
