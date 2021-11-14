@@ -13,8 +13,6 @@
 #include <regex>
 
 #include "include/config.hpp"
-#include "include/metadata.hpp"
-#include "include/ldapquery.h"
 #include "include/send_mail.hpp"
 #include "include/nayuki/QrCode.hpp"
 #include "include/nlohmann/json.hpp"
@@ -410,15 +408,18 @@ bool is_authorized(Config *config,
                           config->groups.begin(), config->groups.end(),
                           std::back_inserter(groups_intsec));
 
+    bool ret = groups_intsec.size() != 0; 
     if (config->debug) {
-        std::ostringstream oss;
-        for (auto &group: groups_intsec)
-            oss << group << ", ";    
-
-        printf("User authorized due to group(s) membership: %s\n", oss.str().c_str());            
+        if (ret){
+            std::ostringstream oss;
+            for (auto &group: groups_intsec)
+                oss << group << ", "; 
+            printf("User authorized due to group(s) membership: %s\n", oss.str().c_str());            
+        }
+        else printf("User unauthorized.\n");                   
     }              
 
-    return groups_intsec.size() != 0;   
+    return ret;   
 }
 
 static bool isEmailAddress(const std::string& str)

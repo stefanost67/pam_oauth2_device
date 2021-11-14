@@ -17,12 +17,6 @@ public:
         token_endpoint,
         userinfo_endpoint,
         username_attribute,
-        ldap_host,
-        ldap_basedn,
-        ldap_user,
-        ldap_passwd,
-        ldap_filter,
-        ldap_attr,
         smtp_server_url,
         smtp_username,
         smtp_password,
@@ -30,18 +24,12 @@ public:
         mail_from,
         mail_from_username,
         mail_cc,
-        group_service_name,
-        cloud_endpoint,
-        cloud_username,
         local_username_suffix;
     int qr_error_correction_level;
-    bool group_access,
-         cloud_access,
-         enable_email,
+    bool enable_email,
          smtp_insecure,
          http_basic_auth,
          debug;
-    std::map<std::string, std::set<std::string>> usermap;
     std::vector<std::string> groups;
 };
 
