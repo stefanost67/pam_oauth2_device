@@ -25,5 +25,6 @@
     },
     "qr": {
         "error_correction_level": 0
-    }
+    },
+    "debug": true 
 }
