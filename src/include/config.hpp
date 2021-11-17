@@ -23,8 +23,7 @@ public:
         smtp_ca_path,
         mail_from,
         mail_from_username,
-        mail_cc,
-        local_username_suffix;
+        mail_cc;
     int qr_error_correction_level;
     bool enable_email,
          smtp_insecure,
