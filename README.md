@@ -1,6 +1,6 @@
 # PAM module for OAuth 2.0 Device flow
 
-This is a PAM module based on a fork of [stfc/pam_oauth2_device](https://github.com/stfc/pam_oauth2_device) that lets you login using OpenID Connect credentials.
+This is a PAM module based on a fork of [stfc/pam_oauth2_device](https://github.com/stfc/pam_oauth2_device) that lets you login using OpenID Connect credentials. It is tailored to work with the [INDIGO-IAM](https://indigo-iam.github.io/v/current/docs/) service. 
 
 It uses the OAuth2 Device Flow, which means that during the login process, you will click a link and log in to your OpenID Connect Provider, which will then authenticate you. 
 
@@ -48,15 +48,21 @@ The module and its configuration file will be installed:
 
 The configuration should be located at `/etc/pam_oauth2_device/config.json`.
 
-**oauth** - required section for your OAuth2 client configuration. You will be able to get most configuration attributes from your IAM administrator.
+---
+**NOTE** In order to proceed with the configuration, you need to register a client in IAM with the following characteristics:
+   - scopes: `openid profile`
+   - `device` grant
+---
+
+**oauth** - required section for your OAuth2 client configuration. 
   * client_id
   * client_secret
-  * scope
+  * scope (default: openid profile)
   * device_endpoint
   * token_endpoint
   * userinfo_endpoint
   * username_attribute - specify the token claim to be used as username (p.e. preferred_username)
-  * groups - if enabled, on login the users IAM groups will be checked against the group specified. If they are in this group, they will be allowed in with their IAM username
+  * groups (default: []) - if a list of groups is provided, on login the users IAM groups will be checked against the group(s) specified. If they are in this group, they will be allowed in. An empty list (default) allows to disable the check.
 
 **qr** - allowed correction levels are
 
